@@ -68,6 +68,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    // Android Studio Preview support
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.ui:ui:1.4.3")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.4.3")
+    implementation("androidx.activity:activity-compose:1.7.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
+
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")

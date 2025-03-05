@@ -24,7 +24,24 @@ import com.example.personaltutorapp.ui.screens.LessonScreen
 import com.example.personaltutorapp.ui.screens.LoginScreen
 import com.example.personaltutorapp.ui.screens.ProfileScreen
 import com.example.personaltutorapp.ui.screens.RegisterScreen
+import com.example.personaltutorapp.ui.screens.HomeScreen
 
+
+@Composable
+fun NavigationGraph() {
+    val navController = rememberNavController()
+
+    NavHost(navController = navController, startDestination = "Home") {
+        composable(route = "Home") {
+            HomeScreen()
+        }
+    }
+}
+
+
+
+
+/*
 @Composable
 fun NavigationGraph() {
     val navController: NavHostController = rememberNavController()
@@ -44,10 +61,10 @@ fun NavigationGraph() {
                         launchSingleTop = true
                     }
                 } else {
-                    navController.navigate("courseList") {
-                        popUpTo("register") { inclusive = true }
-                        launchSingleTop = true
-                    }
+                        navController.navigate("Home") {
+                            popUpTo("login") { inclusive = true }
+                            launchSingleTop = true
+                        }
                 }
             }
         }
@@ -62,6 +79,9 @@ fun NavigationGraph() {
         }
         composable(route = "courseList") {
             CourseListScreen(courseViewModel, navController, isStudent = true) // 確保順序：CourseViewModel, NavController
+        }
+        composable(route = "Home") {
+            HomeScreen(courseViewModel, navController, isStudent = true)
         }
         composable(route = "dashboard") {
             DashboardScreen(navController, courseViewModel)
@@ -91,3 +111,5 @@ fun NavigationGraph() {
 
     }
 }
+
+ */

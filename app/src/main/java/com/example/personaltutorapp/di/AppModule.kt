@@ -5,6 +5,9 @@ import com.example.personaltutorapp.database.AppDatabase
 import com.example.personaltutorapp.database.CourseDao
 import com.example.personaltutorapp.database.EnrollmentDao
 import com.example.personaltutorapp.database.LessonDao
+import com.example.personaltutorapp.database.LessonProgressDao
+import com.example.personaltutorapp.database.StudentLessonStatusDao
+import com.example.personaltutorapp.database.UserDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,4 +33,13 @@ object AppModule {
 
     @Provides
     fun provideEnrollmentDao(database: AppDatabase): EnrollmentDao = database.enrollmentDao()
+    
+    @Provides
+    fun provideUserDao(database: AppDatabase): UserDao = database.userDao()
+    
+    @Provides
+    fun provideStudentLessonStatusDao(database: AppDatabase): StudentLessonStatusDao = database.studentLessonStatusDao()
+    
+    @Provides
+    fun provideLessonProgressDao(database: AppDatabase): LessonProgressDao = database.lessonProgressDao()
 }

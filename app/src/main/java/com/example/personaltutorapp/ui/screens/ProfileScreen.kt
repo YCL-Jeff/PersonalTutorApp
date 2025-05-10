@@ -11,9 +11,15 @@ import com.example.personaltutorapp.ui.viewmodel.AuthViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.navigation.NavController
 
 @Composable
-fun ProfileScreen(viewModel: AuthViewModel) {
+fun ProfileScreen(
+    viewModel: AuthViewModel,
+    navController: NavController
+) {
     val user by viewModel.currentUser.collectAsState(initial = null)
 
     var displayName by remember { mutableStateOf(user?.displayName ?: "") }
@@ -62,6 +68,30 @@ fun ProfileScreen(viewModel: AuthViewModel) {
             }
         }) {
             Text(text = "Save Profile")
+        }
+        
+        // Add Logout Button
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        OutlinedButton(
+            onClick = {
+                viewModel.signOut { success ->
+                    if (success) {
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                contentDescription = "Logout",
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = "Logout")
         }
     }
 }

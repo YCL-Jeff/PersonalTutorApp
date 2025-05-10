@@ -14,7 +14,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,14 +47,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(courseViewModel: CourseViewModel, navController: NavController, isStudent: Boolean) {
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF3F4F6))) {
         TopBar()
         DateSelector()
         TodayCourses()
         CourseProgress()
         Spacer(modifier = Modifier.weight(1f))
-        BottomNavigationBar()
+        BottomNavigationBar(navController)
     }
 }
 
@@ -81,10 +81,10 @@ fun TopBar() {
             containerColor = Color(0xFF1E88E5),
             titleContentColor = Color.White
         ),
-        title = { Text("學習平台") },
+        title = { Text("Learning Platform") },
         actions = {
-            IconButton(onClick = {}) { Icon(Icons.Filled.Notifications, contentDescription = "通知") }
-            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "搜尋") }
+            IconButton(onClick = {}) { Icon(Icons.Filled.Notifications, contentDescription = "Notifications") }
+            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "Search") }
         }
     )
 }
@@ -94,21 +94,21 @@ fun TopBar() {
 
 @Composable
 fun DateSelector() {
-    var selectedDay by remember { mutableStateOf("5") } // 確保記住狀態
-    val days = listOf("4" to "週一", "5" to "週二", "6" to "週三", "7" to "週四", "8" to "週五")
+    var selectedDay by remember { mutableStateOf("5") }
+    val days = listOf("4" to "Mon", "5" to "Tue", "6" to "Wed", "7" to "Thu", "8" to "Fri")
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "左") }
-            Text(text = "2024年3月$selectedDay 日", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "右") }
+            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "Previous") }
+            Text(text = "March $selectedDay, 2024", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            IconButton(onClick = {}) { Icon(Icons.Filled.Search, contentDescription = "Next") }
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             days.forEach { (day, label) ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clickable { selectedDay = day } // 更新選中的日期
+                        .clickable { selectedDay = day }
                         .padding(8.dp)
                         .background(if (day == selectedDay) Color.Blue else Color.Transparent, shape = RoundedCornerShape(8.dp))
                         .padding(8.dp)
@@ -125,9 +125,9 @@ fun DateSelector() {
 @Composable
 fun TodayCourses() {
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("今日課程", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        CourseCard("Python程式設計", "10:00 AM - 11:30 AM", "進行中")
-        CourseCard("網頁設計實戰", "2:00 PM - 3:30 PM", "未開始")
+        Text("Today's Courses", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        CourseCard("Python Programming", "10:00 AM - 11:30 AM", "In Progress")
+        CourseCard("Web Development", "2:00 PM - 3:30 PM", "Not Started")
     }
 }
 
@@ -141,7 +141,7 @@ fun CourseCard(title: String, time: String, status: String) {
                 Text(title, fontWeight = FontWeight.Bold)
                 Text(time, fontSize = 12.sp, color = Color.Gray)
             }
-            Text(status, color = if (status == "進行中") Color.Green else Color.Gray, fontSize = 12.sp)
+            Text(status, color = if (status == "In Progress") Color.Green else Color.Gray, fontSize = 12.sp)
         }
     }
 }
@@ -149,9 +149,9 @@ fun CourseCard(title: String, time: String, status: String) {
 @Composable
 fun CourseProgress() {
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("我的課程進度", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        ProgressCard("Python程式設計", 60)
-        ProgressCard("網頁設計入門", 30)
+        Text("My Course Progress", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        ProgressCard("Python Programming", 60)
+        ProgressCard("Web Development Basics", 30)
     }
 }
 
@@ -161,17 +161,35 @@ fun ProgressCard(title: String, progress: Int) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(progress = progress / 100f, modifier = Modifier.fillMaxWidth())
-            Text("$progress% 完成", fontSize = 12.sp, color = Color.Gray)
+            LinearProgressIndicator(
+                progress = { progress / 100f },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("$progress% Completed", fontSize = 12.sp, color = Color.Gray)
         }
     }
 }
 
 @Composable
-fun BottomNavigationBar() {
+fun BottomNavigationBar(navController: NavController? = null) {
     NavigationBar {
-        NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Filled.Home, contentDescription = "首頁") }, label = { Text("首頁") })
-        NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Filled.List, contentDescription = "課程") }, label = { Text("課程") })
-        NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Filled.Person, contentDescription = "個人") }, label = { Text("個人") })
+        NavigationBarItem(
+            selected = true, 
+            onClick = {},
+            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") }, 
+            label = { Text("Home") }
+        )
+        NavigationBarItem(
+            selected = false, 
+            onClick = { navController?.navigate("courseList") },
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Courses") }, 
+            label = { Text("Courses") }
+        )
+        NavigationBarItem(
+            selected = false, 
+            onClick = { navController?.navigate("profile") },
+            icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") }, 
+            label = { Text("Profile") }
+        )
     }
 }

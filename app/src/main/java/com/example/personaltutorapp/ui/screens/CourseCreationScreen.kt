@@ -15,6 +15,7 @@ fun CourseCreationScreen(viewModel: CourseViewModel, navController: NavControlle
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
+    var isCreating by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -39,11 +40,24 @@ fun CourseCreationScreen(viewModel: CourseViewModel, navController: NavControlle
             label = { Text("Subject") }
         )
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {
-            viewModel.createCourse(title, description, subject)
-            navController.popBackStack() // 返回上一頁
-        }) {
-            Text("Create Course")
+        Button(
+            onClick = {
+                isCreating = true
+                viewModel.createCourse(title, description, subject) { _ ->
+                    isCreating = false
+                    navController.popBackStack() // 返回上一页
+                }
+            },
+            enabled = !isCreating && title.isNotBlank() && description.isNotBlank() && subject.isNotBlank()
+        ) {
+            if (isCreating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Text("Create Course")
+            }
         }
     }
 }

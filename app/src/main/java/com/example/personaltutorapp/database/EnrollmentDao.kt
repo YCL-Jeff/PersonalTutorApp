@@ -14,4 +14,7 @@ interface EnrollmentDao {
 
     @Query("SELECT * FROM enrollments WHERE courseId = :courseId")
     fun getEnrolledStudents(courseId: Int): Flow<List<Enrollment>>
+    
+    @Query("SELECT * FROM enrollments WHERE studentId = :studentId")
+    fun getEnrollmentsForStudent(studentId: String): Flow<List<Enrollment>>
 }

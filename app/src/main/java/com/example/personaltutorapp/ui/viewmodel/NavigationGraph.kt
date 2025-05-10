@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import com.example.personaltutorapp.ui.screens.LessonCreationScreen
 import com.example.personaltutorapp.ui.screens.CourseCreationScreen
 import com.example.personaltutorapp.ui.screens.CourseListScreen
+import com.example.personaltutorapp.ui.screens.CourseLessonsScreen
 import com.example.personaltutorapp.ui.screens.DashboardScreen
 import com.example.personaltutorapp.ui.screens.LessonProgressScreen
 import com.example.personaltutorapp.ui.screens.LessonScreen
@@ -25,15 +26,107 @@ import com.example.personaltutorapp.ui.screens.LoginScreen
 import com.example.personaltutorapp.ui.screens.ProfileScreen
 import com.example.personaltutorapp.ui.screens.RegisterScreen
 import com.example.personaltutorapp.ui.screens.HomeScreen
+import com.example.personaltutorapp.ui.screens.TestCreationScreen
 
 
 @Composable
 fun NavigationGraph() {
-    val navController = rememberNavController()
+    val navController: NavHostController = rememberNavController()
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val courseViewModel: CourseViewModel = hiltViewModel()
 
-    NavHost(navController = navController, startDestination = "Home") {
+    // 监听当前用户状态
+    val user by authViewModel.currentUser.collectAsState(initial = null)
+
+    // 动态设置起始页面
+    LaunchedEffect(user) {
+        user?.let { firebaseUser ->
+            authViewModel.isTutor(firebaseUser.uid) { isTutor ->
+                if (isTutor) {
+                    navController.navigate("dashboard") {
+                        popUpTo("register") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                } else {
+                    navController.navigate("Home") {
+                        popUpTo("login") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+        }
+    }
+
+    NavHost(navController = navController, startDestination = "login") {
+        // Authentication Routes
+        composable("login") {
+            LoginScreen(navController, authViewModel)
+        }
+        composable(route = "register") {
+            RegisterScreen(navController, authViewModel)
+        }
+        
+        // Main User Routes
         composable(route = "Home") {
-            HomeScreen()
+            HomeScreen(courseViewModel, navController, isStudent = true)
+        }
+        composable(route = "dashboard") {
+            DashboardScreen(navController, courseViewModel)
+        }
+        composable(route = "profile") {
+            ProfileScreen(authViewModel, navController)
+        }
+        
+        // Course Management Routes
+        composable(route = "courseList") {
+            CourseListScreen(courseViewModel, navController, isStudent = true)
+        }
+        composable(route = "courseCreation") {
+            CourseCreationScreen(courseViewModel, navController)
+        }
+        
+        // Course and Lesson Routes
+        composable(route = "courseLessons/{courseId}") { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: 1
+            CourseLessonsScreen(
+                courseId = courseId,
+                navController = navController,
+                viewModel = courseViewModel
+            )
+        }
+        
+        composable(route = "lessonCreation/{courseId}") { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: 1
+            LessonCreationScreen(navController = navController, viewModel = courseViewModel, courseId = courseId)
+        }
+        
+        composable(route = "lessonScreen/{courseId}/{lessonId}") { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: 1
+            val lessonId = backStackEntry.arguments?.getString("lessonId")?.toIntOrNull() ?: 1
+            LessonScreen(
+                viewModel = courseViewModel,
+                authViewModel = authViewModel,
+                courseId = courseId,
+                lessonId = lessonId,
+                navController = navController
+            )
+        }
+
+        composable(route = "lessonProgress/{courseId}") { backStackEntry ->
+            val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: 1
+            LessonProgressScreen(
+                navController = navController,
+                viewModel = courseViewModel,
+                courseId = courseId
+            )
+        }
+        
+        // 添加测试创建路由
+        composable(route = "testCreation") {
+            TestCreationScreen(
+                navController = navController,
+                viewModel = courseViewModel
+            )
         }
     }
 }

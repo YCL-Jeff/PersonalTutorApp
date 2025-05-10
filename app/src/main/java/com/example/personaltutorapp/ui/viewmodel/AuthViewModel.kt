@@ -142,4 +142,20 @@ class AuthViewModel @Inject constructor(
             .addOnSuccessListener { callback(true) }
             .addOnFailureListener { callback(false) }
     }
+
+    fun signOut(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                auth.signOut()
+                _currentUser.value = null
+                _loginState.value = LoginState(isLoading = false, error = null)
+                _registerState.value = RegisterState(isLoading = false, error = null)
+                onResult(true)
+            } catch (e: Exception) {
+                _loginState.value = LoginState(isLoading = false, error = e.message)
+                _registerState.value = RegisterState(isLoading = false, error = e.message)
+                onResult(false)
+            }
+        }
+    }
 }

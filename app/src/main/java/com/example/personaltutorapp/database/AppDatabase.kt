@@ -1,22 +1,36 @@
 package com.example.personaltutorapp.database
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.personaltutorapp.model.Course
 import com.example.personaltutorapp.model.Lesson
-import com.example.personaltutorapp.model.Enrollment // ✅ 確保有導入 Enrollment
+import com.example.personaltutorapp.model.Enrollment
+import com.example.personaltutorapp.model.StudentLessonStatus
+import com.example.personaltutorapp.model.User
+import com.example.personaltutorapp.model.LessonProgress
 
 @Database(
-    entities = [Course::class, Lesson::class, Enrollment::class], // ✅ 確保有 Enrollment
-    version = 1,
-    exportSchema = false // ✅ 避免 Gradle 報錯
+    entities = [
+        Course::class, 
+        Lesson::class, 
+        Enrollment::class,
+        User::class,
+        StudentLessonStatus::class,
+        LessonProgress::class
+    ],
+    version = 3,
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun courseDao(): CourseDao
     abstract fun lessonDao(): LessonDao
     abstract fun enrollmentDao(): EnrollmentDao
+    abstract fun studentLessonStatusDao(): StudentLessonStatusDao
+    abstract fun userDao(): UserDao
+    abstract fun lessonProgressDao(): LessonProgressDao
 
     companion object {
         @Volatile
@@ -28,8 +42,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "personal_tutor_db"
-                ).fallbackToDestructiveMigration()
-                    .build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

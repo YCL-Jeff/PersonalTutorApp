@@ -8,227 +8,282 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState // 添加滾動
-import androidx.compose.foundation.verticalScroll // 添加滾動
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle // Placeholder icon
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.rememberVectorPainter // <<< 導入 rememberVectorPainter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview // 導入 Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController // 為了預覽
-import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
-import com.example.personaltutorapp.ui.theme.PersonalTutorAppTheme // 為了預覽
+import com.example.personaltutorapp.ui.theme.PersonalTutorAppTheme
 import com.example.personaltutorapp.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 
-// --- 確保這個檔案裡只有 ProfileScreen 相關的程式碼 ---
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     navController: NavHostController,
     viewModel: AuthViewModel = hiltViewModel(),
-    modifier: Modifier = Modifier // 添加 Modifier 參數
+    modifier: Modifier = Modifier
 ) {
     val user by viewModel.currentUser.collectAsState(initial = null)
-    // SnackbarHostState 需要提升到 NavigationGraph 層級的 Scaffold
-    // val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope() // 保留用於可能的協程操作
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var displayName by remember { mutableStateOf("") }
     var bio by remember { mutableStateOf("") }
     var profilePictureUri by remember { mutableStateOf<Uri?>(null) }
-    var profilePictureUrl by remember { mutableStateOf<String?>(null) }
+    var currentProfilePictureUrl by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isSaving by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(user) {
         user?.uid?.let { uid ->
-            isLoading = true
             viewModel.getUserProfile(uid) { userProfile ->
                 isLoading = false
                 if (userProfile != null) {
                     displayName = userProfile["displayName"] as? String ?: user?.displayName ?: ""
                     bio = userProfile["bio"] as? String ?: ""
-                    profilePictureUrl = userProfile["profilePictureUri"] as? String
+                    currentProfilePictureUrl = userProfile["profilePictureUrl"] as? String
                 } else {
-                    displayName = user?.displayName ?: ""
-                    // scope.launch { snackbarHostState.showSnackbar("無法載入詳細資料...") } // Snackbar 需提升
+                    scope.launch { snackbarHostState.showSnackbar("Failed to load user profile") }
                 }
             }
-        } ?: run {
-            isLoading = false
-        }
+        } ?: run { isLoading = false }
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        profilePictureUri = uri
-        if (uri != null) {
-            profilePictureUrl = null
-        }
-    }
-
-    // 根 Composable (Column) 使用傳入的 modifier
-    Column(
-        modifier = modifier // 使用傳入的 modifier
-            .fillMaxSize() // 保持填滿大小
-            .padding(16.dp) // 保持內邊距
-            .verticalScroll(rememberScrollState()), // 添加滾動
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        if (isLoading) {
-            CircularProgressIndicator()
-            Spacer(modifier = Modifier.height(16.dp)) // 添加間距避免加載指示器觸碰頂部
-        } else {
-            // --- 頭像顯示 ---
-            val imageModifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                .clickable(enabled = !isSaving) { imagePickerLauncher.launch("image/*") }
-
-            val imageToLoad: Any? = profilePictureUri ?: profilePictureUrl
-
-            // *** 修改這裡：將 error 和 placeholder 移出 Builder，傳給 painter ***
-            val placeholderPainter = rememberVectorPainter(image = Icons.Filled.AccountCircle) // 創建 Painter
-            val errorPainter = rememberVectorPainter(image = Icons.Filled.AccountCircle) // 創建 Painter
-
-            val painter = rememberAsyncImagePainter(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageToLoad)
-                    .crossfade(true)
-                    // .error(...) // <<< 從 Builder 中移除
-                    // .placeholder(...) // <<< 從 Builder 中移除
-                    .build(),
-                placeholder = placeholderPainter, // <<< 在這裡傳遞 Painter
-                error = errorPainter // <<< 在這裡傳遞 Painter
-            )
-
-            Box(contentAlignment = Alignment.Center, modifier = imageModifier) {
-                Image(
-                    painter = painter,
-                    contentDescription = "個人頭像",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                // 如果需要在加載時顯示進度圈，可以覆蓋在 Image 上
-                if (painter.state is AsyncImagePainter.State.Loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(40.dp))
-                }
-                // 注意：如果 painter 處於 error 或 placeholder 狀態，它會自動顯示傳遞給它的 painter
-            }
-
-
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(onClick = { imagePickerLauncher.launch("image/*") }, enabled = !isSaving) {
-                Text("更換頭像")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 顯示名稱 ---
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it },
-                label = { Text("顯示名稱") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !isSaving
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // --- 個人簡介 ---
-            OutlinedTextField(
-                value = bio,
-                onValueChange = { bio = it },
-                label = { Text("個人簡介") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 100.dp),
-                enabled = !isSaving
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // --- 儲存按鈕 ---
-            Button(
-                onClick = {
-                    user?.uid?.let { uid ->
-                        isSaving = true
-                        // *** 注意：這裡的 updateProfile 仍未處理圖片上傳 ***
-                        viewModel.updateProfile(uid, displayName, bio, profilePictureUri) { success ->
-                            isSaving = false
-                            // Snackbar 需要在 Scaffold 中顯示
-                            // scope.launch {
-                            //     snackbarHostState.showSnackbar(if (success) "已儲存！" else "儲存失敗")
-                            // }
-                            if (success && profilePictureUri != null) {
-                                // profilePictureUri = null // 應在 ViewModel 成功後處理
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Confirm Log Out") },
+            text = { Text("Are you sure you want to log out?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.signOut {
+                            navController.navigate("login") {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
                             }
                         }
-                    } ?: run {
-                        // scope.launch { snackbarHostState.showSnackbar("錯誤：無法獲取用戶 ID") }
+                        showLogoutDialog = false
                     }
-                },
-                enabled = !isSaving && user != null
-            ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("儲存中...")
-                } else {
-                    Text("儲存變更")
+                ) {
+                    Text("Log Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
                 }
             }
+        )
+    }
 
-            Spacer(modifier = Modifier.weight(1f)) // 將登出按鈕推到底部
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+                .background(Color(0xFFF3F4F6)),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Profile",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // --- 登出按鈕 ---
-            Button(
-                onClick = {
-                    viewModel.signOut {
-                        navController.navigate("login") {
-                            popUpTo(0) { inclusive = true }
-                        }
+            if (isLoading) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+            } else {
+                Card(
+                    shape = RoundedCornerShape(8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ProfileImagePicker(
+                            profilePictureUri = profilePictureUri,
+                            currentProfilePictureUrl = currentProfilePictureUrl,
+                            isSaving = isSaving,
+                            onImagePicked = { profilePictureUri = it }
+                        )
                     }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("登出")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Card(
+                    shape = RoundedCornerShape(8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        OutlinedTextField(
+                            value = displayName,
+                            onValueChange = { if (it.length <= 50) displayName = it },
+                            label = { Text("Display Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            enabled = !isSaving,
+                            shape = RoundedCornerShape(8.dp),
+                            supportingText = { Text("${displayName.length}/50") }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = bio,
+                            onValueChange = { if (it.length <= 200) bio = it },
+                            label = { Text("Bio") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 100.dp),
+                            enabled = !isSaving,
+                            shape = RoundedCornerShape(8.dp),
+                            supportingText = { Text("${bio.length}/200") }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        user?.uid?.let { uid ->
+                            isSaving = true
+                            viewModel.updateProfile(uid, displayName, bio, profilePictureUri) { success, errorMessage ->
+                                isSaving = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        if (success) "Profile saved successfully!" else errorMessage ?: "Failed to save profile"
+                                    )
+                                }
+                                if (success && profilePictureUri != null) {
+                                    profilePictureUri = null
+                                    viewModel.getUserProfile(uid) { updatedProfile ->
+                                        currentProfilePictureUrl = updatedProfile?.get("profilePictureUrl") as? String
+                                    }
+                                }
+                            }
+                        } ?: scope.launch { snackbarHostState.showSnackbar("Unable to retrieve user ID") }
+                    },
+                    enabled = !isSaving && user != null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Saving...")
+                    } else {
+                        Text("Save Changes")
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Button(
+                    onClick = { showLogoutDialog = true },
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Log Out")
+                }
             }
         }
     }
 }
 
-// --- 預覽區 ---
-//@Preview(showBackground = true)
+@Composable
+fun ProfileImagePicker(
+    profilePictureUri: Uri?,
+    currentProfilePictureUrl: String?,
+    isSaving: Boolean,
+    onImagePicked: (Uri?) -> Unit
+) {
+    val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        onImagePicked(uri)
+    }
+
+    val imageModifier = Modifier
+        .size(120.dp)
+        .clip(CircleShape)
+        .background(MaterialTheme.colorScheme.surfaceVariant)
+        .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+        .clickable(enabled = !isSaving) { imagePickerLauncher.launch("image/*") }
+
+    val painter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(profilePictureUri ?: currentProfilePictureUrl)
+            .crossfade(true)
+            .build(),
+        placeholder = rememberVectorPainter(Icons.Filled.AccountCircle),
+        error = rememberVectorPainter(Icons.Filled.AccountCircle)
+    )
+
+    Box(contentAlignment = Alignment.Center, modifier = imageModifier) {
+        Image(
+            painter = painter,
+            contentDescription = "Profile Picture",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        if (painter.state is coil.compose.AsyncImagePainter.State.Loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(40.dp),
+                strokeWidth = 2.dp
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+    TextButton(onClick = { imagePickerLauncher.launch("image/*") }, enabled = !isSaving) {
+        Text("Change Profile Picture")
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable
 fun ProfileScreenPreview() {
     PersonalTutorAppTheme {
-        val navController = rememberNavController()
-        // 簡單預覽佔位符
-        Text("Profile Screen Preview (Requires ViewModel)")
+        ProfileScreen(navController = androidx.navigation.compose.rememberNavController())
     }
 }
-
-// --- 確保這裡沒有 @Composable fun CourseListScreen(...) { ... } 的定義 ---
-

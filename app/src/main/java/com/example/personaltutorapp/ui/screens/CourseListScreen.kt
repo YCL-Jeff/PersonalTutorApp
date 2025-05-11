@@ -1,15 +1,20 @@
 package com.example.personaltutorapp.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,9 +32,11 @@ fun CourseListScreen(
     val courses by viewModel.courses.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
     val filteredCourses by viewModel.filterCourses(searchQuery, selectedSubject).collectAsState(initial = emptyList())
     val snackbarHostState = remember { SnackbarHostState() }
     var requestResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val subjects = listOf("", "Programming", "Math", "Science") // 示例科目
 
     LaunchedEffect(requestResult) {
         requestResult?.let { (success, message) ->
@@ -43,21 +50,14 @@ fun CourseListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Courses") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                }
+                title = { Text("Courses") }
             )
         },
         floatingActionButton = {
             if (!isStudent) {
                 FloatingActionButton(
-                    onClick = { navController.navigate("courseCreation") }
+                    onClick = { navController.navigate("courseCreation") },
+                    modifier = Modifier.semantics { contentDescription = "Create new course" }
                 ) {
                     Text("+")
                 }
@@ -74,32 +74,62 @@ fun CourseListScreen(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 label = { Text("Search by title") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Search courses by title" },
+                placeholder = { Text("Enter course title") },
+                trailingIcon = {
+                    IconButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.semantics { contentDescription = "Filter by subject" }
+                    ) {
+                        Icon(Icons.Default.FilterList, contentDescription = null)
+                    }
+                }
             )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            TextField(
-                value = selectedSubject,
-                onValueChange = { selectedSubject = it },
-                label = { Text("Filter by subject") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                subjects.forEach { subject ->
+                    DropdownMenuItem(
+                        text = { Text(if (subject.isEmpty()) "All Subjects" else subject) },
+                        onClick = {
+                            selectedSubject = subject
+                            expanded = false
+                        }
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
-
+            Text("Found ${filteredCourses.size} courses", style = MaterialTheme.typography.bodySmall)
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                items(filteredCourses) { course ->
-                    CourseItem(
-                        course = course,
-                        viewModel = viewModel,
-                        navController = navController,
-                        isStudent = isStudent,
-                        onRequestResult = { success, message ->
-                            requestResult = Pair(success, message)
-                        }
-                    )
+                if (filteredCourses.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No courses found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp)
+                        )
+                    }
+                } else {
+                    items(filteredCourses) { course ->
+                        CourseItem(
+                            course = course,
+                            viewModel = viewModel,
+                            navController = navController,
+                            isStudent = isStudent,
+                            onRequestResult = { success, message ->
+                                requestResult = Pair(success, message)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -131,6 +161,7 @@ fun CourseItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .clickable {
                 course.courseId?.let { id ->
                     if (isStudent) {
@@ -138,8 +169,10 @@ fun CourseItem(
                     } else {
                         navController.navigate("courseProgress/$id")
                     }
-                }
-            }
+                } ?: Log.e("CourseItem", "Course ID is null for ${course.title}")
+            },
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier
@@ -150,36 +183,37 @@ fun CourseItem(
                 text = course.title,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 text = course.description,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 text = "Subject: ${course.subject}",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-
             if (!isStudent) {
                 LinearProgressIndicator(
                     progress = { courseProgress / 100f },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "Average Progress: $courseProgress%",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.align(Alignment.End)
+                    modifier = Modifier.align(Alignment.End),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
             Button(
                 onClick = {
                     course.courseId?.let { id ->
@@ -203,7 +237,9 @@ fun CourseItem(
                     }
                 },
                 enabled = !isRequesting,
-                modifier = Modifier.align(Alignment.End)
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .semantics { contentDescription = if (isStudent) "Request to join course" else "View course details" }
             ) {
                 Text(text = if (isStudent) "Request to Join" else "View Details")
             }

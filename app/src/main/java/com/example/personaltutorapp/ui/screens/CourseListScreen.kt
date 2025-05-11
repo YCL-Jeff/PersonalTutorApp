@@ -159,6 +159,7 @@ fun CourseListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseItem(
     course: Course,
@@ -174,6 +175,47 @@ fun CourseItem(
     }
 
     var isRequesting by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    // Confirmation dialog for enrollment
+    if (showConfirmDialog && isStudent) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Confirm Enrollment") },
+            text = { Text("Are you sure you want to enroll in '${course.title}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        course.courseId?.let { id ->
+                            val userId = viewModel.getCurrentUserId()
+                            if (userId.isEmpty()) {
+                                Log.w("CourseItem", "User not logged in for enrollment request")
+                                onRequestResult(false, "User not logged in")
+                                showConfirmDialog = false
+                                return@TextButton
+                            }
+                            isRequesting = true
+                            viewModel.requestEnrollment(id, userId) { success ->
+                                isRequesting = false
+                                onRequestResult(
+                                    success,
+                                    if (success) "Enrollment request sent" else "Enrollment request failed"
+                                )
+                                showConfirmDialog = false
+                            }
+                        } ?: Log.e("CourseItem", "Course ID is null for ${course.title}")
+                    }
+                ) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -183,19 +225,7 @@ fun CourseItem(
                 course.courseId?.let { id ->
                     try {
                         if (isStudent) {
-                            val userId = viewModel.getCurrentUserId()
-                            if (userId.isEmpty()) {
-                                onRequestResult(false, "User not logged in")
-                                return@clickable
-                            }
-                            isRequesting = true
-                            viewModel.requestEnrollment(id, userId) { success ->
-                                isRequesting = false
-                                onRequestResult(
-                                    success,
-                                    if (success) "Request sent" else "Request failed"
-                                )
-                            }
+                            // Clicking the card does not trigger enrollment; handled by button
                         } else {
                             navController.navigate("lessonProgress/$id")
                         }
@@ -254,20 +284,8 @@ fun CourseItem(
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        course.courseId?.let { id ->
-                            val userId = viewModel.getCurrentUserId()
-                            if (userId.isEmpty()) {
-                                onRequestResult(false, "User not logged in")
-                                return@Button
-                            }
-                            isRequesting = true
-                            viewModel.requestEnrollment(id, userId) { success ->
-                                isRequesting = false
-                                onRequestResult(
-                                    success,
-                                    if (success) "Enrollment request sent" else "Enrollment request failed"
-                                )
-                            }
+                        if (!isRequesting && course.courseId != null) {
+                            showConfirmDialog = true
                         }
                     },
                     enabled = !isRequesting && course.courseId != null,

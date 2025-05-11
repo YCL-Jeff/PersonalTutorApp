@@ -83,17 +83,18 @@ fun CourseProgress(navController: NavHostController, viewModel: CourseViewModel)
                 contentPadding = PaddingValues(vertical = 8.dp)
             ) {
                 items(enrolledCourses.filter { it.courseId != null && it.title.isNotEmpty() }) { course ->
-                    ProgressCard(
-                        title = course.title,
-                        progress = 60, // 應從 viewModel.getCourseProgress 動態獲取
-                        courseId = course.courseId ?: "",
-                        onClick = {
-                            course.courseId?.let { id ->
-                                Log.d("CourseProgress", "Navigating to lessonScreen/$id")
-                                navController.navigate("lessonScreen/$id")
-                            } ?: Log.e("CourseProgress", "Course ID is null for ${course.title}")
-                        }
-                    )
+                    course.courseId?.let { courseId ->
+                        val progress by viewModel.getCourseProgress(courseId).collectAsState(initial = 0)
+                        ProgressCard(
+                            title = course.title,
+                            progress = progress,
+                            courseId = courseId,
+                            onClick = {
+                                Log.d("CourseProgress", "Navigating to lessonScreen/$courseId")
+                                navController.navigate("lessonScreen/$courseId")
+                            }
+                        )
+                    }
                 }
             }
         }

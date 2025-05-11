@@ -1,0 +1,33 @@
+package com.example.personaltutorapp.di
+
+import android.content.Context
+import com.example.personaltutorapp.database.AppDatabase
+import com.example.personaltutorapp.database.CourseDao
+import com.example.personaltutorapp.database.EnrollmentDao
+import com.example.personaltutorapp.database.LessonDao
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        return AppDatabase.getDatabase(context)
+    }
+
+    @Provides
+    fun provideCourseDao(database: AppDatabase): CourseDao = database.courseDao()
+
+    @Provides
+    fun provideLessonDao(database: AppDatabase): LessonDao = database.lessonDao()
+
+    @Provides
+    fun provideEnrollmentDao(database: AppDatabase): EnrollmentDao = database.enrollmentDao()
+}

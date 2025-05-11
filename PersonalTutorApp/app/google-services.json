@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "395338150984",
+    "project_id": "personaltutorapp-d8d7f",
+    "storage_bucket": "personaltutorapp-d8d7f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395338150984:android:e38359bf947b310c99947d",
+        "android_client_info": {
+          "package_name": "com.example.personaltutorapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBD-4sUMbSUj4jLvtP6NijPEaErk7UVv-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

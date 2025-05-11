@@ -5,5 +5,7 @@ data class Enrollment(
     val courseId: String = "",
     val studentId: String = "",
     val tutorId: String = "",
-    val status: String = "pending"
+    val status: String = "pending",
+    val studentName: String = "", // Added to match Firestore data structure
+    val courseTitle: String = ""  // Added to match Firestore data structure
 )

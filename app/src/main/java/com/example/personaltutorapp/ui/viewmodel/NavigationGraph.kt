@@ -1,11 +1,14 @@
 package com.example.personaltutorapp.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -18,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,6 +36,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.personaltutorapp.ui.screens.CourseCreationScreen
 import com.example.personaltutorapp.ui.screens.CourseListScreen
 import com.example.personaltutorapp.ui.screens.DashboardScreen
+import com.example.personaltutorapp.ui.screens.EnrollmentManagementScreen
 import com.example.personaltutorapp.ui.screens.HomeScreen
 import com.example.personaltutorapp.ui.screens.LessonCreationScreen
 import com.example.personaltutorapp.ui.screens.LessonProgressScreen
@@ -42,6 +47,9 @@ import com.example.personaltutorapp.ui.screens.RegisterScreen
 import com.example.personaltutorapp.ui.viewmodel.AuthViewModel
 import com.example.personaltutorapp.ui.viewmodel.CourseViewModel
 import androidx.navigation.navArgument
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 data class BottomNavItem(
     val title: String,
@@ -112,12 +120,12 @@ fun NavigationGraph() {
                 RegisterScreen(navController = navController, viewModel = authViewModel)
             }
             composable("courseList") {
-                val authViewModel: AuthViewModel = hiltViewModel()
-                val user by authViewModel.currentUser.collectAsState()
+                val localAuthViewModel: AuthViewModel = hiltViewModel()
+                val currentUser by localAuthViewModel.currentUser.collectAsState()
                 var isStudent by remember { mutableStateOf(true) }
-                LaunchedEffect(user) {
-                    user?.uid?.let { uid ->
-                        authViewModel.isTutor(uid) { isTutor ->
+                LaunchedEffect(currentUser) {
+                    currentUser?.uid?.let { uid ->
+                        localAuthViewModel.isTutor(uid) { isTutor ->
                             isStudent = !isTutor
                         }
                     }
@@ -129,32 +137,44 @@ fun NavigationGraph() {
                 )
             }
             composable("Home") {
-                val authViewModel: AuthViewModel = hiltViewModel()
-                val user by authViewModel.currentUser.collectAsState()
-                var isTutor by remember { mutableStateOf(false) }
-                LaunchedEffect(user) {
-                    user?.uid?.let { uid ->
-                        authViewModel.isTutor(uid) { tutorStatus ->
-                            isTutor = tutorStatus
+                val localAuthViewModel: AuthViewModel = hiltViewModel()
+                val currentUser by localAuthViewModel.currentUser.collectAsState()
+                var isTutorState by remember { mutableStateOf(false) }
+                var isLoadingTutorStatus by remember { mutableStateOf(true) }
+
+                LaunchedEffect(currentUser) {
+                    isLoadingTutorStatus = true
+                    currentUser?.uid?.let { uid ->
+                        localAuthViewModel.isTutor(uid) { tutorStatus ->
+                            isTutorState = tutorStatus
+                            isLoadingTutorStatus = false
                         }
+                    } ?: run {
+                        isLoadingTutorStatus = false
                     }
                 }
-                if (isTutor) {
-                    DashboardScreen(
-                        navController = navController,
-                        viewModel = courseViewModel,
-                        isHome = true
-                    )
+
+                if (isLoadingTutorStatus) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 } else {
-                    HomeScreen(
-                        navController = navController,
-                        authViewModel = authViewModel,
-                        courseViewModel = courseViewModel
-                    )
+                    if (isTutorState) {
+                        DashboardScreen(
+                            navController = navController,
+                            viewModel = courseViewModel
+                        )
+                    } else {
+                        HomeScreen(
+                            navController = navController,
+                            authViewModel = localAuthViewModel,
+                            courseViewModel = courseViewModel
+                        )
+                    }
                 }
             }
             composable("courseCreation") {
-                CourseCreationScreen(navController = navController, viewModel = courseViewModel)
+                CourseCreationScreen(navController = navController, viewModel = courseViewModel, authViewModel = authViewModel)
             }
             composable(
                 "lessonCreation/{courseId}",
@@ -193,11 +213,32 @@ fun NavigationGraph() {
             composable("profile") {
                 ProfileScreen(navController = navController, viewModel = authViewModel)
             }
-            composable("search") {
-                Text("搜尋畫面 (待實現)")
-            }
-            composable("notifications") {
-                Text("通知畫面 (待實現)")
+            // Enrollment Management Screen Route
+            composable(
+                route = "enrollmentManagement/{courseId}/{courseTitle}", // Added courseTitle
+                arguments = listOf(
+                    navArgument("courseId") { type = NavType.StringType },
+                    navArgument("courseTitle") { type = NavType.StringType } // Argument for courseTitle
+                )
+            ) { backStackEntry ->
+                val courseId = backStackEntry.arguments?.getString("courseId")
+                // Decode the courseTitle as it might contain spaces or special characters
+                val encodedCourseTitle = backStackEntry.arguments?.getString("courseTitle")
+                val courseTitle = encodedCourseTitle?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+
+
+                if (courseId != null && courseTitle != null) {
+                    EnrollmentManagementScreen(
+                        navController = navController,
+                        courseId = courseId,
+                        courseTitle = courseTitle, // Pass decoded courseTitle
+                        viewModel = courseViewModel
+                    )
+                } else {
+                    Text("錯誤：找不到課程 ID 或標題")
+                    // Optionally, navigate back or show a more user-friendly error
+                    // LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
         }
     }

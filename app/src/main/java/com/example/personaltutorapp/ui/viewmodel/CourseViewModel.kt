@@ -17,6 +17,8 @@ import javax.inject.Inject
 import com.example.personaltutorapp.model.Course
 import com.example.personaltutorapp.model.Enrollment
 import com.example.personaltutorapp.model.Lesson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 
 @HiltViewModel
 class CourseViewModel @Inject constructor(
@@ -260,4 +262,36 @@ class CourseViewModel @Inject constructor(
             }
         }
     }
+
+    fun getEnrolledCourses(): Flow<List<Course>> = flow {
+        try {
+            val userId = getCurrentUserId()
+            if (userId.isEmpty()) {
+                Log.w("CourseViewModel", "User ID is empty")
+                emit(emptyList())
+                return@flow
+            }
+            val enrollmentSnapshot = firestore.collection("enrollments")
+                .whereEqualTo("studentId", userId)
+                .whereEqualTo("status", "accepted")
+                .get()
+                .await()
+            val courseIds = enrollmentSnapshot.documents.mapNotNull { it.getString("courseId") }
+            val courses = mutableListOf<Course>()
+            for (courseId in courseIds) {
+                val courseDoc = firestore.collection("courses")
+                    .document(courseId)
+                    .get()
+                    .await()
+                courseDoc.toObject(Course::class.java)?.let { course ->
+                    courses.add(course.copy(courseId = courseId))
+                }
+            }
+            Log.d("CourseViewModel", "Enrolled courses: ${courses.size}")
+            emit(courses)
+        } catch (e: Exception) {
+            Log.e("CourseViewModel", "Error fetching enrolled courses: ${e.message}", e)
+            emit(emptyList())
+        }
+    }.flowOn(Dispatchers.IO) // 在 IO 線程執行
 }

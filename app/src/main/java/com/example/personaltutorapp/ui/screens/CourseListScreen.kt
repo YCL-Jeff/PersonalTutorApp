@@ -164,10 +164,15 @@ fun CourseItem(
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .clickable {
                 course.courseId?.let { id ->
-                    if (isStudent) {
-                        navController.navigate("enrollmentRequest/$id")
-                    } else {
-                        navController.navigate("courseProgress/$id")
+                    try {
+                        if (isStudent) {
+                            navController.navigate("enrollmentRequest/$id")
+                        } else {
+                            navController.navigate("lessonProgress/$id") // 改為 lessonProgress
+                        }
+                    } catch (e: Exception) {
+                        Log.e("CourseItem", "Navigation failed for course $id: ${e.message}", e)
+                        onRequestResult(false, "Navigation error")
                     }
                 } ?: Log.e("CourseItem", "Course ID is null for ${course.title}")
             },
@@ -232,16 +237,16 @@ fun CourseItem(
                                 )
                             }
                         } else {
-                            navController.navigate("courseProgress/$id")
+                            navController.navigate("lessonProgress/$id") // 改為 lessonProgress
                         }
                     }
                 },
                 enabled = !isRequesting,
                 modifier = Modifier
                     .align(Alignment.End)
-                    .semantics { contentDescription = if (isStudent) "Request to join course" else "View course details" }
+                    .semantics { contentDescription = if (isStudent) "Request to join course" else "View course lessons" }
             ) {
-                Text(text = if (isStudent) "Request to Join" else "View Details")
+                Text(text = if (isStudent) "Request to Join" else "View Lessons")
             }
         }
     }

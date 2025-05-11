@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+import android.util.Log
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -83,66 +84,81 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun register(email: String, password: String, id: String, displayName: String, isTutor: Boolean, onResult: (Boolean) -> Unit) {
+    fun register(
+        email: String,
+        password: String,
+        id: String,
+        displayName: String,
+        isTutor: Boolean,
+        onResult: (Boolean) -> Unit
+    ) {
         viewModelScope.launch {
             try {
                 _registerState.value = RegisterState(isLoading = true)
 
-                // 檢查 ID 是否已存在
-                val idQuery = firestore.collection("users")
-                    .whereEqualTo("id", id)
-                    .limit(1)
-                    .get()
-                    .await()
-                if (idQuery.documents.isNotEmpty()) {
-                    _registerState.value = RegisterState(isLoading = false, error = "ID already exists")
-                    onResult(false)
-                    return@launch
-                }
-
+                // 直接創建用戶，跳過 ID 檢查
                 auth.createUserWithEmailAndPassword(email, password)
-                    .addOnCompleteListener { task ->
-                        if (task.isSuccessful) {
-                            val userId = auth.currentUser?.uid ?: return@addOnCompleteListener
-                            val user = hashMapOf(
+                    .addOnCompleteListener { authTask ->
+                        if (authTask.isSuccessful) {
+                            val userId = auth.currentUser?.uid
+                            if (userId == null) {
+                                _registerState.value = RegisterState(isLoading = false, error = "Failed to get user ID")
+                                onResult(false)
+                                return@addOnCompleteListener
+                            }
+
+                            // 創建用戶文檔
+                            val userData = hashMapOf(
                                 "id" to id,
-                                "displayName" to displayName, // 新增 displayName
+                                "displayName" to displayName,
                                 "email" to email,
-                                "isTutor" to isTutor
+                                "isTutor" to isTutor,
+                                "createdAt" to System.currentTimeMillis()
                             )
+
+                            // 嘗試設置文檔
                             firestore.collection("users").document(userId)
-                                .set(user)
+                                .set(userData)
                                 .addOnSuccessListener {
                                     _registerState.value = RegisterState(isLoading = false)
                                     onResult(true)
                                 }
                                 .addOnFailureListener { e ->
-                                    _registerState.value = RegisterState(isLoading = false, error = e.message)
-                                    onResult(false)
+                                    // 如果設置文檔失敗，但用戶已創建，仍然返回成功
+                                    _registerState.value = RegisterState(
+                                        isLoading = false,
+                                        error = "Account created but profile setup failed: ${e.message}"
+                                    )
+                                    onResult(true)
                                 }
                         } else {
-                            _registerState.value = RegisterState(isLoading = false, error = task.exception?.message)
+                            _registerState.value = RegisterState(
+                                isLoading = false,
+                                error = authTask.exception?.message ?: "Registration failed"
+                            )
                             onResult(false)
                         }
                     }
             } catch (e: Exception) {
-                _registerState.value = RegisterState(isLoading = false, error = e.message)
+                _registerState.value = RegisterState(isLoading = false, error = e.message ?: "Registration failed")
                 onResult(false)
             }
         }
     }
 
-    fun isTutor(userId: String, onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            firestore.collection("users").document(userId).get()
-                .addOnSuccessListener { document ->
-                    val isTutor = document.getBoolean("isTutor") ?: false
-                    onResult(isTutor)
-                }
-                .addOnFailureListener {
-                    onResult(false)
-                }
-        }
+
+    fun isTutor(uid: String, onResult: (Boolean) -> Unit) {
+        firestore.collection("users").document(uid)
+            .get()
+            .addOnSuccessListener { document ->
+                val isTutor = document.getBoolean("isTutor") ?: false
+                Log.d("AuthViewModel", "User $uid isTutor: $isTutor")
+                onResult(isTutor)
+            }
+            .addOnFailureListener { e ->
+                Log.e("AuthViewModel", "Error fetching user: ${e.message}", e)
+                onResult(false)
+            }
     }
 
     fun getUserProfile(uid: String, callback: (Map<String, Any>?) -> Unit) {

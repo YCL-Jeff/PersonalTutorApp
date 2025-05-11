@@ -23,14 +23,31 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(navController: NavController, viewModel: AuthViewModel) {
     val loginState by viewModel.loginState.collectAsState(initial = AuthViewModel.LoginState())
+    val user by viewModel.currentUser.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    var email by remember { mutableStateOf("") }
+    var idOrEmail by remember { mutableStateOf("") } // 改為 idOrEmail
     var password by remember { mutableStateOf("") }
-    var emailError by remember { mutableStateOf<String?>(null) }
+    var idOrEmailError by remember { mutableStateOf<String?>(null) } // 改為 idOrEmailError
     var passwordError by remember { mutableStateOf<String?>(null) }
 
+    // 監聽用戶狀態，根據角色導航
+    LaunchedEffect(user) {
+        user?.let { currentUser ->
+            viewModel.isTutor(currentUser.uid) { isTutor ->
+                val destination = if (isTutor) "dashboard" else "home"
+                if (navController.currentDestination?.route != destination) {
+                    navController.navigate(destination) {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+        }
+    }
+
+    // 顯示錯誤訊息
     LaunchedEffect(loginState.error) {
         loginState.error?.let {
             scope.launch { snackbarHostState.showSnackbar(it) }
@@ -65,16 +82,16 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel) {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedTextField(
-                        value = email,
+                        value = idOrEmail, // 改為 idOrEmail
                         onValueChange = {
-                            email = it
-                            emailError = if (it.isNotEmpty() && !it.contains("@")) "請輸入有效的電子郵件" else null
+                            idOrEmail = it
+                            idOrEmailError = if (it.isNotEmpty() && !it.contains("@") && it.length > 50) "ID must be 50 characters or less" else null
                         },
-                        label = { Text("電子郵件") },
+                        label = { Text("ID or Email") }, // 改為 ID or Email
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        isError = emailError != null,
-                        supportingText = { if (emailError != null) Text(emailError!!, color = MaterialTheme.colorScheme.error) },
+                        isError = idOrEmailError != null,
+                        supportingText = { if (idOrEmailError != null) Text(idOrEmailError!!, color = MaterialTheme.colorScheme.error) },
                         shape = RoundedCornerShape(8.dp),
                         enabled = !loginState.isLoading
                     )
@@ -83,9 +100,9 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel) {
                         value = password,
                         onValueChange = {
                             password = it
-                            passwordError = if (it.length < 6) "密碼需至少6個字符" else null
+                            passwordError = if (it.length < 6) "Password must be at least 6 characters" else null
                         },
-                        label = { Text("密碼") },
+                        label = { Text("Password") },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -106,28 +123,33 @@ fun LoginScreen(navController: NavController, viewModel: AuthViewModel) {
 
             Button(
                 onClick = {
-                    if (emailError == null && passwordError == null) {
-                        viewModel.login(email, password) { /* Navigation handled in NavGraph */ }
+                    if (idOrEmailError == null && passwordError == null) {
+                        viewModel.login(idOrEmail, password) { success ->
+                            if (!success) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Login failed")
+                                }
+                            }
+                        }
                     } else {
-                        scope.launch { snackbarHostState.showSnackbar("請修正輸入錯誤") }
+                        scope.launch { snackbarHostState.showSnackbar("Please fix input errors") }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                enabled = !loginState.isLoading && email.isNotEmpty() && password.isNotEmpty(),
+                enabled = !loginState.isLoading && idOrEmail.isNotEmpty() && password.isNotEmpty(),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("登入")
+                Text("Log In")
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(
                 onClick = { navController.navigate("register") },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("還沒有帳號嗎？註冊")
+                Text("Don't have an account? Register")
             }
         }
     }
 }
-

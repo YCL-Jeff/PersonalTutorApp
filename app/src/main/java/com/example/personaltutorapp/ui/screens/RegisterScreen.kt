@@ -27,11 +27,13 @@ import kotlinx.coroutines.launch
 fun RegisterScreen(navController: NavController, viewModel: AuthViewModel) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+    var id by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") } // 新增 displayName
     var isTutor by remember { mutableStateOf(false) }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
-    var nameError by remember { mutableStateOf<String?>(null) }
+    var idError by remember { mutableStateOf<String?>(null) }
+    var displayNameError by remember { mutableStateOf<String?>(null) } // 新增 displayNameError
 
     val registerState by viewModel.registerState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -81,16 +83,31 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel) {
                         }
                     }
                     OutlinedTextField(
-                        value = name,
+                        value = id,
                         onValueChange = {
-                            name = it
-                            nameError = if (it.length > 50) "Name must be 50 characters or less" else null
+                            id = it
+                            idError = if (it.length > 50) "ID must be 50 characters or less" else null
                         },
-                        label = { Text("Full Name") },
+                        label = { Text("ID") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        isError = nameError != null,
-                        supportingText = { if (nameError != null) Text(nameError!!, color = MaterialTheme.colorScheme.error) },
+                        isError = idError != null,
+                        supportingText = { if (idError != null) Text(idError!!, color = MaterialTheme.colorScheme.error) },
+                        shape = RoundedCornerShape(8.dp),
+                        enabled = !registerState.isLoading
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = displayName, // 新增 displayName 輸入欄位
+                        onValueChange = {
+                            displayName = it
+                            displayNameError = if (it.length > 50) "Display Name must be 50 characters or less" else null
+                        },
+                        label = { Text("Display Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        isError = displayNameError != null,
+                        supportingText = { if (displayNameError != null) Text(displayNameError!!, color = MaterialTheme.colorScheme.error) },
                         shape = RoundedCornerShape(8.dp),
                         enabled = !registerState.isLoading
                     )
@@ -146,8 +163,8 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel) {
 
             Button(
                 onClick = {
-                    if (nameError == null && emailError == null && passwordError == null) {
-                        viewModel.register(email, password, name, isTutor) { success ->
+                    if (idError == null && displayNameError == null && emailError == null && passwordError == null) {
+                        viewModel.register(email, password, id, displayName, isTutor) { success -> // 添加 displayName
                             if (success) {
                                 scope.launch { snackbarHostState.showSnackbar("Registration successful!") }
                                 navController.navigate("login")
@@ -157,7 +174,7 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel) {
                         scope.launch { snackbarHostState.showSnackbar("Please fix input errors") }
                     }
                 },
-                enabled = !registerState.isLoading && name.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty(),
+                enabled = !registerState.isLoading && id.isNotEmpty() && displayName.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -176,4 +193,3 @@ fun RegisterScreen(navController: NavController, viewModel: AuthViewModel) {
         }
     }
 }
-

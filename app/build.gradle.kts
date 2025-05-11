@@ -97,7 +97,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-
+    implementation("com.google.firebase:firebase-storage-ktx")
+    implementation("com.google.android.gms:play-services-base:18.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     // --- 添加以下測試依賴項 ---
     // *** 添加 Firebase Storage ***
     implementation("com.google.firebase:firebase-storage-ktx") // <<< 添加這一行

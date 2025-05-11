@@ -73,28 +73,34 @@ class CourseViewModel @Inject constructor(
 
     // 創建課程
     fun createCourse(
+        courseId: String,
         title: String,
         description: String,
         subject: String,
+        tutorId: String,
         onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
             try {
-                val tutorId = auth.currentUser?.uid ?: throw Exception("User not authenticated")
-                val course = Course(
-                    courseId = null,
-                    title = title,
-                    subject = subject,
-                    tutorId = tutorId,
-                    description = description
+                val courseData = hashMapOf(
+                    "title" to title,
+                    "description" to description,
+                    "subject" to subject,
+                    "tutorId" to tutorId
                 )
-                val documentRef = firestore.collection("courses")
-                    .add(course)
-                    .await()
-                Log.d("CourseViewModel", "Course created successfully with ID: ${documentRef.id}")
-                onResult(true)
+                firestore.collection("courses")
+                    .document(courseId)
+                    .set(courseData)
+                    .addOnSuccessListener {
+                        Log.d("CourseViewModel", "Course created: $courseId")
+                        onResult(true)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("CourseViewModel", "Error creating course: ${e.message}", e)
+                        onResult(false)
+                    }
             } catch (e: Exception) {
-                Log.e("CourseViewModel", "Failed to create course: ${e.message}")
+                Log.e("CourseViewModel", "Error creating course: ${e.message}", e)
                 onResult(false)
             }
         }

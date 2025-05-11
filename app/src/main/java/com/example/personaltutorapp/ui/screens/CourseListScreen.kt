@@ -36,7 +36,7 @@ fun CourseListScreen(
     val filteredCourses by viewModel.filterCourses(searchQuery, selectedSubject).collectAsState(initial = emptyList())
     val snackbarHostState = remember { SnackbarHostState() }
     var requestResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
-    val subjects = listOf("", "Programming", "Math", "Science") // 示例科目
+    val subjects = listOf("", "Programming", "Math", "Science", "English", "History")
 
     LaunchedEffect(requestResult) {
         requestResult?.let { (success, message) ->

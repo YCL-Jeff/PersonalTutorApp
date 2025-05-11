@@ -185,7 +185,6 @@ private fun isSameDay(cal1: Calendar, cal2: Calendar): Boolean {
 
 
 // --- TodayCourses, CourseCard, CourseProgress, ProgressCard (保持不變) ---
-// (這裡省略重複的程式碼，它們應該保持原樣)
 @Composable
 fun TodayCourses(navController: NavHostController) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

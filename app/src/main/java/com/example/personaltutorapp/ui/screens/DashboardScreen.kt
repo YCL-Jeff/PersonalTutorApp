@@ -5,16 +5,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.example.personaltutorapp.model.Course
 import com.example.personaltutorapp.ui.viewmodel.CourseViewModel
-import androidx.compose.runtime.getValue
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(navController: NavController, viewModel: CourseViewModel) {
+fun DashboardScreen(
+    navController: NavController,
+    viewModel: CourseViewModel = hiltViewModel()
+) {
     val courses by viewModel.courses.collectAsState(initial = emptyList())
-    val progress by viewModel.getCourseProgress(1).collectAsState(initial = emptyMap()) // 假設 courseId = 1
 
     Column(
         modifier = Modifier
@@ -22,20 +27,36 @@ fun DashboardScreen(navController: NavController, viewModel: CourseViewModel) {
             .padding(16.dp)
     ) {
         Text(text = "Tutor Dashboard", style = MaterialTheme.typography.headlineLarge)
-        LazyColumn {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
             items(courses) { course ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "Course: ${course.title}")
-                        val enrolledStudents by viewModel.getEnrolledStudents(course.courseId).collectAsState(initial = emptyList())
-                        Text(text = "Enrolled Students: ${enrolledStudents.size}")
-                        val totalLessons = 10 // 假設每門課程有 10 個課程
-                        val progressValue = progress[course.tutorId]?.toFloat()?.div(totalLessons) ?: 0f
-                        LinearProgressIndicator(progress = { progressValue }) // 使用新 API
+                course.courseId?.let { courseId ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = "Course: ${course.title}")
+                            Text(text = "Description: ${course.description}")
+                            Text(text = "Subject: ${course.subject}")
+                            val enrolledStudents by viewModel.getEnrolledStudents(courseId).collectAsState(initial = emptyList())
+                            Text(text = "Enrolled Students: ${enrolledStudents.size}")
+                            val progress by viewModel.getCourseProgress(courseId).collectAsState(initial = 0)
+                            LinearProgressIndicator(
+                                progress = { progress / 100f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "Average Progress: $progress%",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.align(Alignment.End)
+                            )
+                        }
                     }
                 }
             }

@@ -1,47 +1,46 @@
 package com.example.personaltutorapp.ui
 
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding // 導入 padding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar // 導入 NavigationBar
-import androidx.compose.material3.NavigationBarItem // 導入 NavigationBarItem
-import androidx.compose.material3.Scaffold // 導入 Scaffold
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf // 導入 mutableIntStateOf
-import androidx.compose.runtime.remember // 導入 remember
-import androidx.compose.runtime.setValue // 導入 setValue
-import androidx.compose.ui.Modifier // 導入 Modifier
-import androidx.compose.ui.graphics.vector.ImageVector // 導入 ImageVector
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavDestination.Companion.hierarchy // 導入 hierarchy
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState // 導入 currentBackStackEntryAsState
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.personaltutorapp.ui.screens.CourseCreationScreen
 import com.example.personaltutorapp.ui.screens.CourseListScreen
 import com.example.personaltutorapp.ui.screens.DashboardScreen
 import com.example.personaltutorapp.ui.screens.HomeScreen
-import com.example.personaltutorapp.ui.screens.LessonCreationScreen
+import com.example.personaltutorapp.ui.screens.LessonCreationScreen // 添加導入
 import com.example.personaltutorapp.ui.screens.LessonProgressScreen
-// import com.example.personaltutorapp.ui.screens.LessonScreen
 import com.example.personaltutorapp.ui.screens.LoginScreen
 import com.example.personaltutorapp.ui.screens.ProfileScreen
 import com.example.personaltutorapp.ui.screens.RegisterScreen
-// import com.example.personaltutorapp.ui.screens.SearchScreen
-// import com.example.personaltutorapp.ui.screens.NotificationsScreen
 import com.example.personaltutorapp.ui.viewmodel.AuthViewModel
 import com.example.personaltutorapp.ui.viewmodel.CourseViewModel
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 
 // 將底部導覽列項目定義移到這裡
 data class BottomNavItem(
@@ -72,16 +71,12 @@ fun NavigationGraph() {
     val shouldShowBottomBar = bottomNavItems.any { it.route == currentDestination?.route }
 
     // 使用 LaunchedEffect 處理登入/登出後的自動導航
-    LaunchedEffect(user, currentDestination) { // 監聽用戶和當前目標
+    LaunchedEffect(user, currentDestination) {
         val currentRoute = currentDestination?.route
         user?.uid?.let { uid ->
             // --- 用戶已登入 ---
-            // 異步檢查用戶角色 (如果不需要區分，可以移除 isTutor 檢查)
             authViewModel.isTutor(uid) { isTutor ->
-                // *** 修改這裡：目標統一設為 Home ***
                 val targetDestination = "Home"
-
-                // 只有當我們不在目標頁面，並且目前在登入/註冊頁時才導航
                 if (currentRoute != targetDestination && (currentRoute == "login" || currentRoute == "register")) {
                     navController.navigate(targetDestination) {
                         popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
@@ -103,7 +98,6 @@ fun NavigationGraph() {
     // 使用 Scaffold 包裹 NavHost
     Scaffold(
         bottomBar = {
-            // 只有在需要顯示的頁面才創建底部導覽列
             if (shouldShowBottomBar) {
                 HomeBottomNavigationBar(
                     items = bottomNavItems,
@@ -112,59 +106,58 @@ fun NavigationGraph() {
                 )
             }
         }
-    ) { innerPadding -> // Scaffold 提供內邊距
-        // NavHost 放在 Scaffold 的 content lambda 中
+    ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = "login",
-            // 將 Scaffold 提供的內邊距應用到 NavHost 的 Modifier
             modifier = Modifier.padding(innerPadding)
         ) {
-            // --- 定義路由 ---
-            // 確保 Screen Composable 接受 modifier 並應用它
-
             composable("login") {
                 LoginScreen(navController = navController, viewModel = authViewModel)
             }
-            composable(route = "register") {
+            composable("register") {
                 RegisterScreen(navController = navController, viewModel = authViewModel)
             }
-            composable(route = "courseList") {
-                CourseListScreen(navController = navController, viewModel = courseViewModel, isStudent = true /* modifier = Modifier */) // 假設已添加 modifier
+            composable("courseList") {
+                CourseListScreen(navController = navController, viewModel = courseViewModel, isStudent = true)
             }
-            composable(route = "Home") {
+            composable("Home") {
                 HomeScreen(
                     navController = navController,
                     authViewModel = authViewModel,
                     courseViewModel = courseViewModel
-                    /* modifier = Modifier */ // 假設已添加 modifier
                 )
             }
-            composable(route = "dashboard") {
-                // Dashboard 仍然可訪問，但不是登入後目標
-                DashboardScreen(navController = navController, viewModel = courseViewModel /* modifier = Modifier */)
+            composable("dashboard") {
+                DashboardScreen(navController = navController, viewModel = courseViewModel)
             }
-            composable(route = "courseCreation") {
-                CourseCreationScreen(navController = navController, viewModel = courseViewModel /* modifier = Modifier */)
+            composable("courseCreation") {
+                CourseCreationScreen(navController = navController, viewModel = courseViewModel)
             }
-            composable(route = "lessonCreation/{courseId}") { backStackEntry ->
-                val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: -1
-                if (courseId != -1) {
-                    LessonCreationScreen(navController = navController, viewModel = courseViewModel, courseId = courseId)
-                } else {
-                    Text("無效的課程 ID")
-                }
+            composable(
+                "lessonCreation/{courseId}",
+                arguments = listOf(navArgument("courseId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
+                LessonCreationScreen(
+                    navController = navController,
+                    viewModel = courseViewModel,
+                    courseId = courseId
+                )
             }
-            composable(route = "lessonProgress/{courseId}") { backStackEntry ->
-                val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: -1
-                if (courseId != -1) {
-                    LessonProgressScreen(navController = navController, viewModel = courseViewModel, courseId = courseId)
-                } else {
-                    Text("無效的課程 ID")
-                }
+            composable(
+                "lessonProgress/{courseId}",
+                arguments = listOf(navArgument("courseId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
+                LessonProgressScreen(
+                    navController = navController,
+                    viewModel = courseViewModel,
+                    courseId = courseId
+                )
             }
-            composable(route = "profile") {
-                ProfileScreen(navController = navController, viewModel = authViewModel /* modifier = Modifier */) // 假設已添加 modifier
+            composable("profile") {
+                ProfileScreen(navController = navController, viewModel = authViewModel)
             }
             composable("search") {
                 Text("搜尋畫面 (待實現)")
@@ -176,7 +169,6 @@ fun NavigationGraph() {
     }
 }
 
-// 將底部導覽列 Composable 移到這裡
 @Composable
 fun HomeBottomNavigationBar(
     items: List<BottomNavItem>,

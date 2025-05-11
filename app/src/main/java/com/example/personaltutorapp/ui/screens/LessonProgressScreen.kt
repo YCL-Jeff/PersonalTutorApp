@@ -96,6 +96,23 @@ fun LessonProgressItem(
     navController: NavController,
     courseId: String
 ) {
+    var isLessonCompleted by remember { mutableStateOf(false) }
+    val viewModel = hiltViewModel<CourseViewModel>()
+    
+    // Check if lesson is completed by user
+    LaunchedEffect(lesson.lessonId) {
+        lesson.lessonId?.let { lessonId ->
+            val userLessons = viewModel.firestore.collection("userLessons")
+                .whereEqualTo("userId", viewModel.getCurrentUserId())
+                .whereEqualTo("lessonId", lessonId)
+                .whereEqualTo("completed", true)
+                .get()
+                .await()
+            
+            isLessonCompleted = !userLessons.isEmpty
+        }
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -106,7 +123,7 @@ fun LessonProgressItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Status icon
-            if (lesson.isCompleted) {
+            if (isLessonCompleted) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Completed",
@@ -124,7 +141,7 @@ fun LessonProgressItem(
 
             // Lesson title
             Text(
-                text = lesson.title,
+                text = "Lesson Content", 
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier
                     .weight(1f)
@@ -133,9 +150,9 @@ fun LessonProgressItem(
 
             // Completion status
             Text(
-                text = if (lesson.isCompleted) "Completed" else "Not Completed",
+                text = if (isLessonCompleted) "Completed" else "Not Completed",
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (lesson.isCompleted) Color.Green else Color.Gray
+                color = if (isLessonCompleted) Color.Green else Color.Gray
             )
         }
     }

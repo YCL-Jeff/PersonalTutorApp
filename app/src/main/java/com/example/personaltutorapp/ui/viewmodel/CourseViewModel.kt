@@ -109,9 +109,7 @@ class CourseViewModel @Inject constructor(
     // 創建課程
     fun createLesson(
         courseId: String,
-        title: String,
         content: String,
-        order: Int,
         onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
@@ -119,10 +117,7 @@ class CourseViewModel @Inject constructor(
                 val lesson = Lesson(
                     lessonId = null, // Firestore 自動生成 ID
                     courseId = courseId,
-                    title = title,
-                    content = content,
-                    order = order,
-                    isCompleted = false
+                    content = content
                 )
                 val documentRef = firestore.collection("lessons")
                     .add(lesson)
@@ -199,22 +194,31 @@ class CourseViewModel @Inject constructor(
                     Lesson(
                         lessonId = doc.id,
                         courseId = doc.getString("courseId") ?: "",
-                        title = doc.getString("title") ?: "",
-                        content = doc.getString("content") ?: "",
-                        order = doc.getLong("order")?.toInt() ?: 0,
-                        isCompleted = doc.getBoolean("isCompleted") ?: false
+                        content = doc.getString("content") ?: ""
                     )
                 } catch (e: Exception) {
                     Log.e("CourseViewModel", "Error parsing lesson: ${e.message}")
                     null
                 }
             }
+            
+            val userLessonsSnapshot = firestore.collection("userLessons")
+                .whereEqualTo("courseId", courseId)
+                .whereEqualTo("userId", getCurrentUserId())
+                .get()
+                .await()
+            
+            val completedLessonIds = userLessonsSnapshot.documents
+                .filter { it.getBoolean("completed") == true }
+                .mapNotNull { it.getString("lessonId") }
+                
             val totalLessons = lessons.size
             if (totalLessons == 0) {
                 emit(0)
                 return@flow
             }
-            val completedCount = lessons.count { it.isCompleted }
+            
+            val completedCount = completedLessonIds.size
             val progressPercentage = (completedCount * 100) / totalLessons
             emit(progressPercentage)
         } catch (e: Exception) {
@@ -235,10 +239,7 @@ class CourseViewModel @Inject constructor(
                     Lesson(
                         lessonId = doc.id,
                         courseId = doc.getString("courseId") ?: "",
-                        title = doc.getString("title") ?: "",
-                        content = doc.getString("content") ?: "",
-                        order = doc.getLong("order")?.toInt() ?: 0,
-                        isCompleted = doc.getBoolean("isCompleted") ?: false
+                        content = doc.getString("content") ?: ""
                     )
                 } catch (e: Exception) {
                     Log.e("CourseViewModel", "Error parsing lesson: ${e.message}")
@@ -256,10 +257,55 @@ class CourseViewModel @Inject constructor(
     fun completeLesson(lessonId: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
-                firestore.collection("lessons")
+                val userId = getCurrentUserId()
+                if (userId.isEmpty()) {
+                    onResult(false)
+                    return@launch
+                }
+                
+                // Get the courseId for this lesson
+                val lessonDoc = firestore.collection("lessons")
                     .document(lessonId)
-                    .update("isCompleted", true)
+                    .get()
                     .await()
+                val courseId = lessonDoc.getString("courseId") ?: ""
+                
+                if (courseId.isEmpty()) {
+                    Log.e("CourseViewModel", "Course ID not found for lesson $lessonId")
+                    onResult(false)
+                    return@launch
+                }
+                
+                // Create or update entry in userLessons collection
+                val userLessonData = hashMapOf(
+                    "userId" to userId,
+                    "lessonId" to lessonId,
+                    "courseId" to courseId,
+                    "completed" to true,
+                    "completedAt" to com.google.firebase.Timestamp.now()
+                )
+                
+                // Use a query to find existing record first
+                val existingRecord = firestore.collection("userLessons")
+                    .whereEqualTo("userId", userId)
+                    .whereEqualTo("lessonId", lessonId)
+                    .get()
+                    .await()
+                
+                if (existingRecord.documents.isEmpty()) {
+                    // Create new record
+                    firestore.collection("userLessons")
+                        .add(userLessonData)
+                        .await()
+                } else {
+                    // Update existing record
+                    val docId = existingRecord.documents[0].id
+                    firestore.collection("userLessons")
+                        .document(docId)
+                        .update("completed", true, "completedAt", com.google.firebase.Timestamp.now())
+                        .await()
+                }
+                
                 Log.d("CourseViewModel", "Lesson $lessonId marked as completed")
                 onResult(true)
             } catch (e: Exception) {

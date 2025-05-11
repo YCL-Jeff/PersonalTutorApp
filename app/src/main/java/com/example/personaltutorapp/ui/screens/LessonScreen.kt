@@ -83,7 +83,7 @@ fun LessonScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(lessons.sortedBy { it.order }) { lesson ->
+                    items(lessons) { lesson ->
                         LessonItem(
                             lesson = lesson,
                             isStudent = isStudent,
@@ -111,6 +111,22 @@ fun LessonItem(
     viewModel: CourseViewModel,
     onLessonCompleted: (Boolean) -> Unit
 ) {
+    var isLessonCompleted by remember { mutableStateOf(false) }
+    
+    // Check if lesson is completed by user
+    LaunchedEffect(lesson.lessonId) {
+        lesson.lessonId?.let { lessonId ->
+            val userLessons = viewModel.firestore.collection("userLessons")
+                .whereEqualTo("userId", viewModel.getCurrentUserId())
+                .whereEqualTo("lessonId", lessonId)
+                .whereEqualTo("completed", true)
+                .get()
+                .await()
+            
+            isLessonCompleted = !userLessons.isEmpty
+        }
+    }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -125,7 +141,7 @@ fun LessonItem(
                 .padding(16.dp)
         ) {
             Text(
-                text = lesson.title,
+                text = "Lesson Content",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -143,15 +159,18 @@ fun LessonItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (lesson.isCompleted) "Completed" else "Not Completed",
+                    text = if (isLessonCompleted) "Completed" else "Not Completed",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (lesson.isCompleted) Color(0xFF4CAF50) else Color.Gray
+                    color = if (isLessonCompleted) Color(0xFF4CAF50) else Color.Gray
                 )
-                if (isStudent && !lesson.isCompleted) {
+                if (isStudent && !isLessonCompleted) {
                     Button(
                         onClick = {
                             lesson.lessonId?.let { id ->
                                 viewModel.completeLesson(id) { success ->
+                                    if (success) {
+                                        isLessonCompleted = true
+                                    }
                                     onLessonCompleted(success)
                                 }
                             }

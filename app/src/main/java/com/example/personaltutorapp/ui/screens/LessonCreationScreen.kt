@@ -15,9 +15,7 @@ fun LessonCreationScreen(
     viewModel: CourseViewModel,
     courseId: String
 ) {
-    var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
-    var order by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -30,25 +28,9 @@ fun LessonCreationScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         TextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text("Title") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextField(
             value = content,
             onValueChange = { content = it },
             label = { Text("Content") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TextField(
-            value = order,
-            onValueChange = { order = it },
-            label = { Text("Order (e.g., 1, 2, 3)") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -60,22 +42,15 @@ fun LessonCreationScreen(
 
         Button(
             onClick = {
-                if (title.isBlank() || content.isBlank() || order.isBlank()) {
-                    errorMessage = "All fields are required"
-                    return@Button
-                }
-                val orderInt = order.toIntOrNull()
-                if (orderInt == null) {
-                    errorMessage = "Order must be a valid number"
+                if (content.isBlank()) {
+                    errorMessage = "Content is required"
                     return@Button
                 }
                 isLoading = true
                 errorMessage = null
                 viewModel.createLesson(
                     courseId = courseId,
-                    title = title,
                     content = content,
-                    order = orderInt,
                     onResult = { success: Boolean ->
                         isLoading = false
                         if (success) {

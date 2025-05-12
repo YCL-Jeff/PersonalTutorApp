@@ -30,11 +30,14 @@ fun DashboardScreen(
 ) {
     val tutorCourses by viewModel.tutorCourses.collectAsState(initial = emptyList())
     val allCourses by viewModel.courses.collectAsState(initial = emptyList())
+    val tutorId by viewModel.currentTutorCustomId.collectAsState()
     var isInitialFetchComplete by remember { mutableStateOf(false) }
 
-    // Update isInitialFetchComplete when courses are first fetched
-    LaunchedEffect(allCourses) {
-        isInitialFetchComplete = true
+    // Update isInitialFetchComplete when courses and tutor ID are fetched
+    LaunchedEffect(allCourses, tutorId) {
+        if (allCourses.isNotEmpty() || tutorId != null) {
+            isInitialFetchComplete = true
+        }
     }
 
     // Loading state: show loading only if fetch is not complete
@@ -77,7 +80,7 @@ fun DashboardScreen(
                         }
                     }
                 }
-                tutorCourses.isEmpty() -> {
+                tutorCourses.isEmpty() && isInitialFetchComplete -> {
                     Text(
                         text = "You haven't created any courses yet. Click the '+' button to create a new course!",
                         style = MaterialTheme.typography.bodyLarge,

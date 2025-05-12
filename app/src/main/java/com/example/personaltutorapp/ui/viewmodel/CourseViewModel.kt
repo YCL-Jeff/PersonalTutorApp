@@ -20,19 +20,19 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.flow.callbackFlow
-import com.google.firebase.firestore.ktx.toObject
 import javax.inject.Inject
 import com.example.personaltutorapp.model.Course
 import com.example.personaltutorapp.model.Enrollment
 import com.example.personaltutorapp.model.Lesson
 import com.example.personaltutorapp.model.User
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import com.google.firebase.firestore.ListenerRegistration
-import kotlinx.coroutines.channels.awaitClose
+import java.net.URL
+import java.net.HttpURLConnection
+import java.io.OutputStreamWriter
+import java.io.BufferedReader
+import org.json.JSONObject
 
 @OptIn(ExperimentalCoroutinesApi::class)
 data class EnrichedEnrollment(
@@ -42,7 +42,7 @@ data class EnrichedEnrollment(
 
 data class EnrolledCourse(
     val course: Course,
-    val enrollmentStatus: String // "accepted" or "pending"
+    val enrollmentStatus: String
 )
 
 @HiltViewModel
@@ -54,7 +54,26 @@ class CourseViewModel @Inject constructor(
     private val _courses = MutableStateFlow<List<Course>>(emptyList())
     val courses: StateFlow<List<Course>> = _courses.asStateFlow()
 
-    private val _currentTutorCustomId = MutableStateFlow<String?>(null)
+    private val _currentTutorCustomIdInternal = MutableStateFlow<String?>(null)
+    val currentTutorCustomId: StateFlow<String?> = _currentTutorCustomIdInternal.asStateFlow()
+
+    private val _enrolledCoursesUi = MutableStateFlow<List<EnrolledCourse>>(emptyList())
+    val enrolledCoursesUi: StateFlow<List<EnrolledCourse>> = _enrolledCoursesUi.asStateFlow()
+
+    private val _isLoadingEnrolledCourses = MutableStateFlow(true)
+    val isLoadingEnrolledCourses: StateFlow<Boolean> = _isLoadingEnrolledCourses.asStateFlow()
+
+    private val _enrollmentError = MutableStateFlow<String?>(null)
+    val enrollmentError: StateFlow<String?> = _enrollmentError.asStateFlow()
+
+    private val _enrichedEnrollments = MutableStateFlow<List<EnrichedEnrollment>>(emptyList())
+    val enrichedEnrollments: StateFlow<List<EnrichedEnrollment>> = _enrichedEnrollments.asStateFlow()
+
+    private val _isLoadingEnrichedEnrollments = MutableStateFlow(true)
+    val isLoadingEnrichedEnrollments: StateFlow<Boolean> = _isLoadingEnrichedEnrollments.asStateFlow()
+
+    private val _enrichedEnrollmentsError = MutableStateFlow<String?>(null)
+    val enrichedEnrollmentsError: StateFlow<String?> = _enrichedEnrollmentsError.asStateFlow()
 
     init {
         Log.d("CourseViewModel", "Initializing CourseViewModel")
@@ -63,93 +82,93 @@ class CourseViewModel @Inject constructor(
         firestore.collection("courses")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
-                    Log.e("CourseViewModel", "Error fetching courses: ${e.message}", e)
-                    _courses.value = emptyList()
+                    Log.e("CourseViewModel", "Error fetching courses: ${e.message}")
                     return@addSnapshotListener
                 }
                 snapshot?.let { querySnapshot ->
-                    Log.d("CourseViewModel", "Received courses snapshot with ${querySnapshot.documents.size} documents")
                     val courseList = querySnapshot.documents.mapNotNull { doc ->
                         try {
-                            val course = Course(
-                                courseId = doc.id,
-                                title = doc.getString("title") ?: "",
-                                subject = doc.getString("subject") ?: "",
-                                tutorId = doc.getString("tutorId") ?: "",
-                                description = doc.getString("description") ?: ""
-                            )
-                            Log.d("CourseViewModel", "Parsed course: ${course.title} (tutorId: ${course.tutorId})")
-                            course
+                            doc.toObject(Course::class.java)?.copy(courseId = doc.id)
                         } catch (ex: Exception) {
-                            Log.e("CourseViewModel", "Error parsing course ${doc.id}: ${ex.message}", ex)
+                            Log.e("CourseViewModel", "Error parsing course ${doc.id}: ${ex.message}")
                             null
                         }
                     }
-                    Log.d("CourseViewModel", "Fetched ${courseList.size} courses: ${courseList.map { "${it.title} (tutorId: ${it.tutorId})" }}")
                     _courses.value = courseList
-                } ?: run {
-                    Log.w("CourseViewModel", "Courses snapshot is null")
-                    _courses.value = emptyList()
+                    Log.d("CourseViewModel", "Fetched ${courseList.size} courses")
                 }
             }
+        auth.addAuthStateListener { firebaseAuth ->
+            firebaseAuth.currentUser?.uid?.let {
+                Log.d("CourseViewModel", "Auth state changed, refreshing enrolled courses for userId: $it")
+                viewModelScope.launch(Dispatchers.IO) {
+                    delay(1000) // Delay to ensure customId is fetched
+                    refreshEnrolledCourses()
+                }
+            } ?: run {
+                Log.w("CourseViewModel", "No authenticated user, clearing enrolled courses")
+                _enrolledCoursesUi.value = emptyList()
+                _enrollmentError.value = "User not authenticated, please sign in"
+            }
+        }
     }
 
     private fun fetchCurrentUserCustomId() {
         viewModelScope.launch(Dispatchers.IO) {
-            val user = auth.currentUser
-            if (user == null) {
-                Log.w("CourseViewModel", "No authenticated user found")
-                _currentTutorCustomId.value = null
-                return@launch
-            }
-            Log.d("CourseViewModel", "Fetching custom ID for user UID: ${user.uid}")
-
-            // Retry up to 3 times with delay
-            repeat(3) { attempt ->
+            repeat(5) { attempt ->
                 try {
-                    val userDoc = firestore.collection("users").document(user.uid).get().await()
-                    if (userDoc.exists()) {
-                        val customId = userDoc.getString("id")
-                        if (customId.isNullOrEmpty()) {
-                            Log.w("CourseViewModel", "User document exists but 'id' field is null or empty for UID: ${user.uid}")
-                            _currentTutorCustomId.value = null
-                        } else {
-                            Log.d("CourseViewModel", "Fetched current tutor custom ID ('id' field): $customId for UID: ${user.uid}")
-                            _currentTutorCustomId.value = customId
-                        }
-                        return@launch // Exit on success
-                    } else {
-                        Log.w("CourseViewModel", "No user document found for UID: ${user.uid}")
-                        _currentTutorCustomId.value = null
+                    val user = auth.currentUser
+                    if (user == null) {
+                        Log.w("CourseViewModel", "No authenticated user found, attempt ${attempt + 1}")
+                        _currentTutorCustomIdInternal.value = null
+                        _enrollmentError.value = "User not authenticated, please sign in"
+                        delay(4000)
+                        return@repeat
                     }
+                    val userDoc = firestore.collection("users").document(user.uid).get().await()
+                    if (!userDoc.exists()) {
+                        Log.w("CourseViewModel", "No user document found for UID: ${user.uid}, attempt ${attempt + 1}")
+                        _currentTutorCustomIdInternal.value = null
+                        _enrollmentError.value = "User profile not found"
+                        delay(4000)
+                        return@repeat
+                    }
+                    val customId = userDoc.getString("id")
+                    if (customId.isNullOrEmpty()) {
+                        Log.w("CourseViewModel", "Custom ID is null or empty for UID: ${user.uid}, attempt ${attempt + 1}")
+                        _currentTutorCustomIdInternal.value = null
+                        _enrollmentError.value = "User profile missing custom ID"
+                        delay(4000)
+                        return@repeat
+                    }
+                    _currentTutorCustomIdInternal.value = customId
+                    Log.d("CourseViewModel", "Fetched current tutor custom ID ('id' field): $customId for UID: ${user.uid}")
+                    return@launch
                 } catch (e: Exception) {
-                    Log.e("CourseViewModel", "Error fetching user custom ID for UID: ${user.uid} (attempt ${attempt + 1}/3): ${e.message}", e)
-                    if (attempt < 2) delay(1000) // Wait 1 second before retrying
+                    Log.e("CourseViewModel", "Error fetching user custom ID for UID: ${auth.currentUser?.uid}, attempt ${attempt + 1}: ${e.message}", e)
+                    if (attempt == 4) {
+                        _currentTutorCustomIdInternal.value = null
+                        _enrollmentError.value = "Failed to fetch user profile after retries: ${e.message}"
+                    }
+                    delay(4000)
                 }
             }
-            Log.e("CourseViewModel", "Failed to fetch user custom ID after 3 attempts for UID: ${user.uid}")
-            _currentTutorCustomId.value = null
         }
     }
 
-    val tutorCourses: Flow<List<Course>> = _currentTutorCustomId.flatMapLatest { tutorId ->
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tutorCourses: Flow<List<Course>> = _currentTutorCustomIdInternal.flatMapLatest { tutorId ->
         if (tutorId == null) {
-            Log.w("CourseViewModel", "Tutor ID is null, emitting empty course list")
             flow { emit(emptyList<Course>()) }
         } else {
             _courses.map { allCourses ->
-                Log.d("CourseViewModel", "Filtering courses for tutorId: $tutorId, total courses: ${allCourses.size}")
-                val filteredCourses = allCourses.filter { course ->
-                    val matches = course.tutorId == tutorId
-                    Log.d("CourseViewModel", "Course ${course.title} (tutorId: ${course.tutorId}) matches tutorId $tutorId: $matches")
-                    matches
+                allCourses.filter { course ->
+                    course.tutorId == tutorId
                 }
-                Log.d("CourseViewModel", "Filtered ${filteredCourses.size} courses for tutorId: $tutorId: ${filteredCourses.map { it.title }}")
-                filteredCourses
             }
         }
     }.catch { e ->
-        Log.e("CourseViewModel", "Error in tutorCourses flow: ${e.message}", e)
+        Log.e("CourseViewModel", "Error in tutorCourses flow: ${e.message}")
         emit(emptyList<Course>())
     }.flowOn(Dispatchers.IO)
 
@@ -157,7 +176,7 @@ class CourseViewModel @Inject constructor(
         return auth.currentUser?.uid ?: ""
     }
 
-    fun filterCourses(query: String, subjectFilter: String): Flow<List<Course>> = courses.map { courseList ->
+    fun filterCourses(query: String, subjectFilter: String): Flow<List<Course>> = _courses.map { courseList ->
         courseList.filter { course ->
             val matchesTitle = course.title.contains(query, ignoreCase = true)
             val matchesSubject = subjectFilter.isEmpty() || course.subject.equals(subjectFilter, ignoreCase = true)
@@ -175,7 +194,7 @@ class CourseViewModel @Inject constructor(
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val courseData = hashMapOf(
+                val courseData: HashMap<String, Any> = hashMapOf(
                     "title" to title,
                     "description" to description,
                     "subject" to subject,
@@ -203,7 +222,7 @@ class CourseViewModel @Inject constructor(
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val lessonData = hashMapOf(
+                val lessonData: HashMap<String, Any> = hashMapOf(
                     "courseId" to courseId,
                     "content" to content,
                     "title" to title,
@@ -225,13 +244,7 @@ class CourseViewModel @Inject constructor(
     fun requestEnrollment(courseId: String, studentAuthId: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Fetch course data
                 val courseDoc = firestore.collection("courses").document(courseId).get().await()
-                if (!courseDoc.exists()) {
-                    Log.e("CourseViewModel", "Course document not found for courseId: $courseId")
-                    launch(Dispatchers.Main) { onResult(false) }
-                    return@launch
-                }
                 val tutorCustomId = courseDoc.getString("tutorId")
                 val courseTitle = courseDoc.getString("title")
 
@@ -241,134 +254,151 @@ class CourseViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Fetch student data
                 val studentUserDoc = firestore.collection("users").document(studentAuthId).get().await()
-                if (!studentUserDoc.exists()) {
-                    Log.e("CourseViewModel", "No user document found for student Auth UID: $studentAuthId")
-                    launch(Dispatchers.Main) { onResult(false) }
-                    return@launch
+                val studentUserObject = if (studentUserDoc.exists()) {
+                    studentUserDoc.toObject(User::class.java)?.copy(uid = studentUserDoc.id)
+                } else {
+                    null
                 }
+                val studentDisplayNameForEnrollment = studentUserObject?.displayName?.takeIf { it.isNotEmpty() }
+                    ?: studentUserObject?.id
+                    ?: "Unknown Student (AuthUID: $studentAuthId)"
 
-                val studentUserObject = studentUserDoc.toObject(User::class.java)?.copy(uid = studentUserDoc.id)
-                val studentCustomId = studentUserObject?.id?.takeIf { it.isNotEmpty() } ?: run {
-                    Log.w("CourseViewModel", "Student custom ID not found for Auth UID: $studentAuthId, using Auth UID as fallback")
-                    studentAuthId
-                }
-                val studentDisplayName = studentUserObject?.displayName?.takeIf { it.isNotEmpty() } ?: studentCustomId
-
-                // Create enrollment data
-                val enrollmentData = hashMapOf(
+                val enrollmentData: HashMap<String, Any> = hashMapOf(
                     "courseId" to courseId,
-                    "studentId" to studentCustomId, // Use custom ID
+                    "studentId" to (studentUserObject?.id ?: studentAuthId),
                     "tutorId" to tutorCustomId,
                     "status" to "pending",
-                    "studentName" to studentDisplayName,
+                    "studentName" to studentDisplayNameForEnrollment,
                     "courseTitle" to courseTitle
                 )
 
-                // Write to Firestore
                 firestore.collection("enrollments")
                     .add(enrollmentData)
                     .await()
-                Log.d("CourseViewModel", "Enrollment requested: course $courseId, studentCustomId $studentCustomId, studentName $studentDisplayName")
+                Log.d("CourseViewModel", "Enrollment requested: course $courseId, studentAuthId $studentAuthId")
                 launch(Dispatchers.Main) { onResult(true) }
             } catch (e: Exception) {
-                Log.e("CourseViewModel", "Error requesting enrollment for course $courseId, studentAuthId $studentAuthId: ${e.message}", e)
+                Log.e("CourseViewModel", "Error requesting enrollment: ${e.message}", e)
                 launch(Dispatchers.Main) { onResult(false) }
             }
         }
     }
 
-    fun getEnrichedEnrollmentsForCourse(courseId: String): Flow<List<EnrichedEnrollment>> = callbackFlow {
-        val listenerRegistration: ListenerRegistration = firestore.collection("enrollments")
-            .whereEqualTo("courseId", courseId)
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("CourseViewModel", "Error fetching enrollments for course $courseId: ${e.message}", e)
-                    trySend(emptyList()).isSuccess
-                    return@addSnapshotListener
-                }
-                snapshot?.let { querySnapshot ->
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            val enrichedEnrollments = coroutineScope {
-                                querySnapshot.documents.mapNotNull { doc ->
-                                    async {
-                                        val enrollment = doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
-                                        if (enrollment != null) {
-                                            // Query users collection using custom studentId
-                                            val studentDoc = firestore.collection("users")
-                                                .whereEqualTo("id", enrollment.studentId)
-                                                .limit(1)
-                                                .get()
-                                                .await()
-                                            val student = if (studentDoc.documents.isNotEmpty()) {
-                                                studentDoc.documents.first().toObject(User::class.java)?.copy(uid = studentDoc.documents.first().id)
-                                            } else {
-                                                Log.w("CourseViewModel", "Student document not found for studentId (custom ID): ${enrollment.studentId}")
-                                                null
-                                            }
-                                            EnrichedEnrollment(enrollment, student)
-                                        } else {
-                                            Log.w("CourseViewModel", "Failed to parse enrollment document: ${doc.id}")
-                                            null
-                                        }
-                                    }
-                                }.awaitAll().filterNotNull()
-                            }
-                            Log.d("CourseViewModel", "Fetched ${enrichedEnrollments.size} enriched enrollments for course $courseId: ${enrichedEnrollments.map { "${it.enrollment.studentName} (status: ${it.enrollment.status})" }}")
-                            trySend(enrichedEnrollments).isSuccess
-                        } catch (e: Exception) {
-                            Log.e("CourseViewModel", "Error processing enriched enrollments for course $courseId: ${e.message}", e)
-                            trySend(emptyList()).isSuccess
-                        }
-                    }
-                } ?: Log.w("CourseViewModel", "Enrollment snapshot is null for course $courseId")
-            }
+    fun fetchEnrichedEnrollmentsForCourse(courseId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingEnrichedEnrollments.value = true
+            _enrichedEnrollmentsError.value = null
+            try {
+                val enrollmentsSnapshot = firestore.collection("enrollments")
+                    .whereEqualTo("courseId", courseId)
+                    .get()
+                    .await()
 
-        awaitClose { listenerRegistration.remove() }
-    }.flowOn(Dispatchers.IO)
+                val fetchedEnrichedEnrollments = coroutineScope {
+                    enrollmentsSnapshot.documents.mapNotNull { doc ->
+                        async(Dispatchers.IO) {
+                            val enrollment = doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
+                            if (enrollment != null) {
+                                val studentDoc = firestore.collection("users")
+                                    .whereEqualTo("id", enrollment.studentId)
+                                    .limit(1)
+                                    .get()
+                                    .await()
+                                val student = if (studentDoc.documents.isNotEmpty()) {
+                                    studentDoc.documents.first().toObject(User::class.java)?.copy(uid = studentDoc.documents.first().id)
+                                } else {
+                                    Log.w("CourseViewModel", "Student document not found for studentId: ${enrollment.studentId}")
+                                    null
+                                }
+                                EnrichedEnrollment(enrollment, student)
+                            } else {
+                                null
+                            }
+                        }
+                    }.awaitAll().filterNotNull()
+                }
+                _enrichedEnrollments.value = fetchedEnrichedEnrollments
+                Log.d("CourseViewModel", "Fetched ${fetchedEnrichedEnrollments.size} enriched enrollments for course $courseId")
+            } catch (e: Exception) {
+                Log.e("CourseViewModel", "Error fetching enriched enrollments for course $courseId: ${e.message}", e)
+                _enrichedEnrollments.value = emptyList()
+                _enrichedEnrollmentsError.value = "Failed to load enrollments: ${e.message}"
+            } finally {
+                _isLoadingEnrichedEnrollments.value = false
+            }
+        }
+    }
 
     fun updateEnrollmentStatus(
         enrollmentId: String,
         newStatus: String,
         student: User?,
         courseTitle: String?,
-        onResult: (Boolean) -> Unit
+        onResult: (Boolean, String?) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 firestore.collection("enrollments").document(enrollmentId)
                     .update("status", newStatus)
                     .await()
-                Log.d("CourseViewModel", "Enrollment $enrollmentId status updated to $newStatus")
-                if (student != null && courseTitle != null) {
+                Log.d("CourseViewModel", "Enrollment $enrollmentId status updated to $newStatus in Firestore.")
+
+                if (student != null && courseTitle != null && (newStatus == "accepted" || newStatus == "rejected")) {
                     val studentEmail = student.email
                     val studentNameForEmail = student.displayName.takeIf { it.isNotEmpty() } ?: student.id
-                    val subject: String
-                    val body: String
-                    if (newStatus == "accepted") {
-                        subject = "Your course enrollment has been approved!"
-                        body = "Dear ${studentNameForEmail},\n\nCongratulations! Your enrollment for the course '${courseTitle}' has been approved.\n\nHappy learning!"
-                    } else if (newStatus == "rejected") {
-                        subject = "Regarding your course enrollment"
-                        body = "Dear ${studentNameForEmail},\n\nWe regret to inform you that your enrollment for the course '${courseTitle}' has been rejected.\n\nPlease contact us if you have any questions."
-                    } else {
-                        launch(Dispatchers.Main) { onResult(true) }
+
+                    if (studentEmail.isNullOrEmpty()) {
+                        Log.w("CourseViewModel", "Student email is empty for enrollment $enrollmentId.")
+                        launch(Dispatchers.Main) { onResult(true, "Status updated. Student email missing for notification.") }
                         return@launch
                     }
-                    Log.i("EmailNotification", "---- SIMULATING EMAIL ----")
-                    Log.i("EmailNotification", "To: $studentEmail")
-                    Log.i("EmailNotification", "Subject: $subject")
-                    Log.i("EmailNotification", "Body: \n$body")
-                    Log.i("EmailNotification", "--------------------------")
+                    val scriptUrl = "https://script.google.com/macros/s/AKfycbxyVdusqORtmC6MCrdPgLVo7XsfnKGN2oE9pXdprepkINfLYgjkXRkotR3qDv3XlLFO/exec"
+
+                    try {
+                        val url = URL(scriptUrl)
+                        val connection = url.openConnection() as HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.doOutput = true
+                        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        connection.connectTimeout = 10000
+                        connection.readTimeout = 10000
+
+                        val jsonPayload = JSONObject()
+                        jsonPayload.put("studentEmail", studentEmail)
+                        jsonPayload.put("studentName", studentNameForEmail)
+                        jsonPayload.put("courseTitle", courseTitle)
+                        jsonPayload.put("enrollmentStatus", newStatus)
+
+                        val outputStreamWriter = OutputStreamWriter(connection.outputStream, "UTF-8")
+                        outputStreamWriter.write(jsonPayload.toString())
+                        outputStreamWriter.flush()
+                        outputStreamWriter.close()
+
+                        val responseCode = connection.responseCode
+                        Log.d("CourseViewModel", "Apps Script HTTP Response Code: $responseCode")
+
+                        if (responseCode == HttpURLConnection.HTTP_OK) {
+                            val response = connection.inputStream.bufferedReader().readText()
+                            Log.i("CourseViewModel", "Apps Script Response: $response")
+                            launch(Dispatchers.Main) { onResult(true, "Status updated. Email notification sent.") }
+                        } else {
+                            val errorResponse = connection.errorStream?.bufferedReader()?.readText() ?: "No error response"
+                            Log.e("CourseViewModel", "Error calling Apps Script. Code: $responseCode, Response: $errorResponse")
+                            launch(Dispatchers.Main) { onResult(true, "Status updated. Failed to send email notification (HTTP $responseCode).") }
+                        }
+                        connection.disconnect()
+                    } catch (e: Exception) {
+                        Log.e("CourseViewModel", "Exception during Apps Script call: ${e.message}", e)
+                        launch(Dispatchers.Main) { onResult(true, "Status updated. Email notification failed: ${e.message}") }
+                    }
                 } else {
-                    Log.w("CourseViewModel", "Cannot send email notification: student details or course title missing. Student: $student, CourseTitle: $courseTitle")
+                    Log.w("CourseViewModel", "Skipping email notification for enrollment $enrollmentId.")
+                    launch(Dispatchers.Main) { onResult(true, "Status updated.") }
                 }
-                launch(Dispatchers.Main) { onResult(true) }
             } catch (e: Exception) {
                 Log.e("CourseViewModel", "Error updating enrollment status for $enrollmentId: ${e.message}", e)
-                launch(Dispatchers.Main) { onResult(false) }
+                launch(Dispatchers.Main) { onResult(false, "Failed to update status: ${e.message}") }
             }
         }
     }
@@ -382,7 +412,6 @@ class CourseViewModel @Inject constructor(
             val enrollments = snapshot.documents.mapNotNull { doc ->
                 doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
             }
-            Log.d("CourseViewModel", "Fetched ${enrollments.size} enrolled students for course $courseId")
             emit(enrollments)
         } catch (e: Exception) {
             Log.e("CourseViewModel", "Error fetching enrollments for course $courseId: ${e.message}", e)
@@ -402,13 +431,11 @@ class CourseViewModel @Inject constructor(
                 }
             }
             if (firestoreLessonsData.isEmpty()) {
-                Log.d("CourseViewModel", "No lessons found for course $courseId, progress is 0%")
                 emit(0)
                 return@flow
             }
             val completedLessonsCount = firestoreLessonsData.count { it.isCompleted }
             val progressPercentage = (completedLessonsCount * 100) / firestoreLessonsData.size
-            Log.d("CourseViewModel", "Course $courseId progress: $completedLessonsCount/$firestoreLessonsData.size lessons completed ($progressPercentage%)")
             emit(progressPercentage)
         } catch (e: Exception) {
             Log.e("CourseViewModel", "Error fetching course progress for $courseId: ${e.message}", e)
@@ -420,24 +447,17 @@ class CourseViewModel @Inject constructor(
         try {
             val snapshot = firestore.collection("lessons")
                 .whereEqualTo("courseId", courseId)
+                .orderBy("order")
                 .get()
                 .await()
             val lessons = snapshot.documents.mapNotNull { doc ->
                 try {
-                    Lesson(
-                        lessonId = doc.id,
-                        courseId = doc.getString("courseId") ?: "",
-                        title = doc.getString("title") ?: "",
-                        content = doc.getString("content") ?: "",
-                        order = doc.getLong("order")?.toInt() ?: 0,
-                        isCompleted = doc.getBoolean("completed") ?: false
-                    )
+                    doc.toObject(Lesson::class.java)?.copy(lessonId = doc.id)
                 } catch (e: Exception) {
                     Log.e("CourseViewModel", "Error parsing lesson: ${e.message}")
                     null
                 }
             }
-            Log.d("CourseViewModel", "Fetched ${lessons.size} lessons for course $courseId")
             emit(lessons)
         } catch (e: Exception) {
             Log.e("CourseViewModel", "Error fetching lessons for course $courseId: ${e.message}", e)
@@ -461,64 +481,116 @@ class CourseViewModel @Inject constructor(
         }
     }
 
-    fun getEnrolledCourses(): Flow<List<EnrolledCourse>> = flow {
-        val userId = getCurrentUserId()
-        if (userId.isEmpty()) {
-            Log.w("CourseViewModel", "Student User ID is empty, cannot fetch enrolled courses.")
-            emit(emptyList())
-            return@flow
-        }
-        try {
-            Log.d("CourseViewModel", "Fetching enrolled courses for userId: $userId")
-            // Fetch student's custom ID
-            val studentDoc = firestore.collection("users").document(userId).get().await()
-            if (!studentDoc.exists()) {
-                Log.w("CourseViewModel", "No user document found for student Auth UID: $userId")
-                emit(emptyList())
-                return@flow
+    fun refreshEnrolledCourses() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingEnrolledCourses.value = true
+            _enrollmentError.value = null
+            val userId = getCurrentUserId()
+            if (userId.isEmpty()) {
+                Log.w("CourseViewModel", "User ID is empty for refreshEnrolledCourses.")
+                _enrolledCoursesUi.value = emptyList()
+                _isLoadingEnrolledCourses.value = false
+                _enrollmentError.value = "User not authenticated, please sign in"
+                return@launch
             }
-            val studentCustomId = studentDoc.getString("id") ?: run {
-                Log.w("CourseViewModel", "Student custom ID not found for Auth UID: $userId, using Auth UID as fallback")
-                userId
-            }
-            Log.d("CourseViewModel", "Student custom ID: $studentCustomId")
-
-            // Query enrollments for both accepted and pending statuses
-            val enrollmentSnapshot = firestore.collection("enrollments")
-                .whereEqualTo("studentId", studentCustomId)
-                .whereIn("status", listOf("accepted", "pending"))
-                .get()
-                .await()
-            Log.d("CourseViewModel", "Found ${enrollmentSnapshot.documents.size} enrollments for studentCustomId: $studentCustomId")
-
-            val enrolledCourses = mutableListOf<EnrolledCourse>()
-            for (doc in enrollmentSnapshot.documents) {
-                val enrollment = doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
-                if (enrollment != null) {
-                    Log.d("CourseViewModel", "Processing enrollment: courseId=${enrollment.courseId}, status=${enrollment.status}")
-                    val courseDoc = firestore.collection("courses").document(enrollment.courseId).get().await()
-                    if (courseDoc.exists()) {
-                        val course = Course(
-                            courseId = courseDoc.id,
-                            title = courseDoc.getString("title") ?: "",
-                            subject = courseDoc.getString("subject") ?: "",
-                            tutorId = courseDoc.getString("tutorId") ?: "",
-                            description = courseDoc.getString("description") ?: ""
-                        )
-                        enrolledCourses.add(EnrolledCourse(course, enrollment.status))
-                        Log.d("CourseViewModel", "Added course: ${course.title} (status: ${enrollment.status})")
-                    } else {
-                        Log.w("CourseViewModel", "Course document not found for courseId: ${enrollment.courseId}")
+            repeat(5) { attempt ->
+                try {
+                    val userDoc = firestore.collection("users").document(userId).get().await()
+                    if (!userDoc.exists()) {
+                        Log.w("CourseViewModel", "No user document found for Auth UID: $userId, attempt ${attempt + 1}")
+                        _enrolledCoursesUi.value = emptyList()
+                        _isLoadingEnrolledCourses.value = false
+                        _enrollmentError.value = "User profile not found"
+                        delay(4000)
+                        return@repeat
                     }
-                } else {
-                    Log.w("CourseViewModel", "Failed to parse enrollment document: ${doc.id}")
+                    val isTutor = userDoc.getBoolean("isTutor") ?: false
+                    val customId = userDoc.getString("id") ?: userId
+                    Log.d("CourseViewModel", "Refreshing enrolled courses for userId: $userId, customId: $customId, isTutor: $isTutor, attempt ${attempt + 1}")
+
+                    val enrolledCourses = mutableListOf<EnrolledCourse>()
+
+                    // Tutor query
+                    if (isTutor) {
+                        // Query enrollments for tutor
+                        val tutorSnapshot = firestore.collection("enrollments")
+                            .whereEqualTo("tutorId", customId)
+                            .whereIn("status", listOf("accepted", "pending"))
+                            .get()
+                            .await()
+                        Log.d("CourseViewModel", "Found ${tutorSnapshot.documents.size} tutor enrollments for customId: $customId")
+
+                        for (doc in tutorSnapshot.documents) {
+                            val enrollment = doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
+                            if (enrollment != null && enrollment.courseId.isNotEmpty()) {
+                                val courseDoc = firestore.collection("courses").document(enrollment.courseId).get().await()
+                                if (courseDoc.exists()) {
+                                    val course = courseDoc.toObject(Course::class.java)?.copy(courseId = courseDoc.id)
+                                    if (course != null) {
+                                        enrolledCourses.add(EnrolledCourse(course, enrollment.status))
+                                        Log.d("CourseViewModel", "Added tutor course from enrollments: ${course.title} (status: ${enrollment.status})")
+                                    }
+                                } else {
+                                    Log.w("CourseViewModel", "Course document ${enrollment.courseId} not found for enrollment ${doc.id}")
+                                }
+                            }
+                        }
+
+                        // Query courses directly for tutor
+                        val courseSnapshot = firestore.collection("courses")
+                            .whereEqualTo("tutorId", customId)
+                            .get()
+                            .await()
+                        Log.d("CourseViewModel", "Found ${courseSnapshot.documents.size} owned courses for customId: $customId")
+
+                        for (doc in courseSnapshot.documents) {
+                            val course = doc.toObject(Course::class.java)?.copy(courseId = doc.id)
+                            if (course != null && !enrolledCourses.any { it.course.courseId == course.courseId }) {
+                                enrolledCourses.add(EnrolledCourse(course, "owned"))
+                                Log.d("CourseViewModel", "Added owned course: ${course.title} (status: owned)")
+                            }
+                        }
+                    }
+
+                    // Student query
+                    val studentSnapshot = firestore.collection("enrollments")
+                        .whereEqualTo("studentId", customId)
+                        .whereIn("status", listOf("accepted", "pending"))
+                        .get()
+                        .await()
+                    Log.d("CourseViewModel", "Found ${studentSnapshot.documents.size} student enrollments for customId: $customId")
+
+                    for (doc in studentSnapshot.documents) {
+                        val enrollment = doc.toObject(Enrollment::class.java)?.copy(enrollmentId = doc.id)
+                        if (enrollment != null && enrollment.courseId.isNotEmpty()) {
+                            val courseDoc = firestore.collection("courses").document(enrollment.courseId).get().await()
+                            if (courseDoc.exists()) {
+                                val course = courseDoc.toObject(Course::class.java)?.copy(courseId = courseDoc.id)
+                                if (course != null && !enrolledCourses.any { it.course.courseId == course.courseId }) {
+                                    enrolledCourses.add(EnrolledCourse(course, enrollment.status))
+                                    Log.d("CourseViewModel", "Added student course: ${course.title} (status: ${enrollment.status})")
+                                }
+                            } else {
+                                Log.w("CourseViewModel", "Course document ${enrollment.courseId} not found for enrollment ${doc.id}")
+                            }
+                        }
+                    }
+
+                    _enrolledCoursesUi.value = enrolledCourses
+                    Log.d("CourseViewModel", "Refreshed ${enrolledCourses.size} enrolled courses for userId: $userId")
+                    _isLoadingEnrolledCourses.value = false
+                    _enrollmentError.value = null
+                    return@launch
+                } catch (e: Exception) {
+                    Log.e("CourseViewModel", "Error refreshing enrolled courses for userId: $userId, attempt ${attempt + 1}: ${e.message}", e)
+                    if (attempt == 4) {
+                        _enrolledCoursesUi.value = emptyList()
+                        _isLoadingEnrolledCourses.value = false
+                        _enrollmentError.value = "Failed to load courses after retries: ${e.message}"
+                    }
+                    delay(4000)
                 }
             }
-            Log.d("CourseViewModel", "Fetched ${enrolledCourses.size} enrolled courses for studentCustomId: $studentCustomId: ${enrolledCourses.map { "${it.course.title} (status: ${it.enrollmentStatus})" }}")
-            emit(enrolledCourses)
-        } catch (e: Exception) {
-            Log.e("CourseViewModel", "Error fetching enrolled courses for student $userId: ${e.message}", e)
-            emit(emptyList())
         }
-    }.flowOn(Dispatchers.IO)
+    }
 }

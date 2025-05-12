@@ -33,9 +33,19 @@ fun CourseListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf("") }
     var filterDropdownExpanded by remember { mutableStateOf(false) }
+    var isInitialFetchComplete by remember { mutableStateOf(false) }
 
     val filteredCourses: List<Course> by viewModel.filterCourses(searchQuery, selectedSubject)
         .collectAsState(initial = emptyList())
+    val allCourses by viewModel.courses.collectAsState()
+
+    // Update isInitialFetchComplete when courses are first fetched
+    LaunchedEffect(allCourses) {
+        if (allCourses.isNotEmpty()) {
+            Log.d("CourseListScreen", "Initial courses fetched: ${allCourses.size}")
+            isInitialFetchComplete = true
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var requestResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
@@ -114,44 +124,57 @@ fun CourseListScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "Found ${filteredCourses.size} courses",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            if (filteredCourses.isEmpty()) {
-                Text(
-                    text = "No courses found matching the criteria.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp)
-                )
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(
-                        items = filteredCourses,
-                        key = { course ->
-                            course.courseId ?: run {
-                                Log.w("CourseListScreen", "Course ID is null for course: ${course.title}")
-                                course.hashCode().toString()
-                            }
-                        }
-                    ) { course ->
-                        CourseItem(
-                            course = course,
-                            viewModel = viewModel,
-                            navController = navController,
-                            isStudent = isStudent,
-                            onRequestResult = { success, message ->
-                                requestResult = Pair(success, message)
-                            }
+            if (!isInitialFetchComplete) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            "Loading courses...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp)
                         )
+                    }
+                }
+            } else {
+                Text(
+                    text = "Found ${filteredCourses.size} courses",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                if (filteredCourses.isEmpty()) {
+                    Text(
+                        text = "No courses found matching the criteria.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        items(
+                            items = filteredCourses,
+                            key = { course ->
+                                course.courseId ?: run {
+                                    Log.w("CourseListScreen", "Course ID is null for course: ${course.title}")
+                                    course.hashCode().toString()
+                                }
+                            }
+                        ) { course ->
+                            CourseItem(
+                                course = course,
+                                viewModel = viewModel,
+                                navController = navController,
+                                isStudent = isStudent,
+                                onRequestResult = { success, message ->
+                                    requestResult = Pair(success, message)
+                                }
+                            )
+                        }
                     }
                 }
             }

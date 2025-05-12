@@ -1,5 +1,6 @@
 package com.example.personaltutorapp.ui.screens
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,8 +28,14 @@ fun EnrollmentManagementScreen(
     courseTitle: String,
     viewModel: CourseViewModel = hiltViewModel()
 ) {
-    val enrichedEnrollments by viewModel.getEnrichedEnrollmentsForCourse(courseId)
-        .collectAsState(initial = emptyList())
+    val enrichedEnrollments by viewModel.enrichedEnrollments.collectAsState()
+    val isLoading by viewModel.isLoadingEnrichedEnrollments.collectAsState()
+    val error by viewModel.enrichedEnrollmentsError.collectAsState()
+
+    LaunchedEffect(courseId) {
+        Log.d("EnrollmentScreen", "Fetching enriched enrollments for courseId: $courseId")
+        viewModel.fetchEnrichedEnrollmentsForCourse(courseId)
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showSnackbar by remember { mutableStateOf(false) }
@@ -48,10 +55,10 @@ fun EnrollmentManagementScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("管理報名 - $courseTitle") },
+                title = { Text("Manage Enrollments - $courseTitle") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -63,39 +70,75 @@ fun EnrollmentManagementScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            if (enrichedEnrollments.isEmpty()) {
-                Text(
-                    text = "目前沒有報名請求。",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp)
-                )
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(
-                        items = enrichedEnrollments,
-                        key = { enrichedItem ->
-                            enrichedItem.enrollment.enrollmentId
-                                ?: enrichedItem.student?.uid
-                                ?: enrichedItem.hashCode().toString()
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Text(
+                                text = "Loading enrollment requests...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
                         }
-                    ) { enrichedItem ->
-                        EnrollmentRequestItem(
-                            enrichedEnrollment = enrichedItem,
-                            courseTitleFromArg = courseTitle,
-                            onAction = { enrollmentId, newStatus, student ->
-                                viewModel.updateEnrollmentStatus(enrollmentId, newStatus, student, courseTitle) { success ->
-                                    snackbarMessage = if (success) {
-                                        "狀態已更新為 $newStatus"
-                                    } else {
-                                        "更新失敗，請重試"
-                                    }
-                                    showSnackbar = true
-                                }
-                            }
+                    }
+                }
+                error != null -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = error ?: "Failed to load enrollment data.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
                         )
+                        Button(onClick = { viewModel.fetchEnrichedEnrollmentsForCourse(courseId) }) {
+                            Text("Retry")
+                        }
+                    }
+                }
+                enrichedEnrollments.isEmpty() -> {
+                    Text(
+                        text = "No enrollment requests at the moment.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp)
+                    )
+                }
+                else -> {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(
+                            items = enrichedEnrollments,
+                            key = { enrichedItem ->
+                                enrichedItem.enrollment.enrollmentId
+                                    ?: enrichedItem.student?.uid
+                                    ?: enrichedItem.hashCode().toString()
+                            }
+                        ) { enrichedItem ->
+                            EnrollmentRequestItem(
+                                enrichedEnrollment = enrichedItem,
+                                courseTitleFromArg = courseTitle,
+                                onAction = { enrollmentId, newStatus, student ->
+                                    viewModel.updateEnrollmentStatus(enrollmentId, newStatus, student, courseTitle) { success, message ->
+                                        snackbarMessage = message ?: if (success) {
+                                            "Status updated to $newStatus"
+                                        } else {
+                                            "Failed to update status, please try again"
+                                        }
+                                        showSnackbar = true
+                                        if (success) {
+                                            viewModel.fetchEnrichedEnrollmentsForCourse(courseId)
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -110,7 +153,7 @@ private fun EnrollmentRequestItem(
     onAction: (enrollmentId: String, newStatus: String, student: User?) -> Unit
 ) {
     val enrollment = enrichedEnrollment.enrollment
-    val student = enrichedEnrollment.student // User object with uid, id, displayName, email
+    val student = enrichedEnrollment.student
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -118,25 +161,26 @@ private fun EnrollmentRequestItem(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                // Prioritize displayName, fallback to 'id' (custom ID)
-                text = "學生: ${student?.displayName?.takeIf { it.isNotEmpty() } ?: student?.id ?: "未知學生 (AuthUID: ${enrollment.studentId})"}",
+                text = "Student: ${student?.displayName?.takeIf { it.isNotEmpty() }
+                    ?: student?.id?.takeIf { it.isNotEmpty() } // Use 'id' instead of 'name'
+                    ?: "Unknown Student (AuthUID: ${enrollment.studentId})"}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            student?.email?.let {
+            student?.email?.let { email ->
                 Text(
-                    text = "郵箱: $it",
+                    text = "Email: $email",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "報名狀態: ${enrollment.status.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}",
+                text = "Enrollment Status: ${enrollment.status.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = when (enrollment.status) {
                     "pending" -> MaterialTheme.colorScheme.tertiary
-                    "accepted" -> Color(0xFF4CAF50) // Green
+                    "accepted" -> Color(0xFF4CAF50)
                     "rejected" -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurface
                 }

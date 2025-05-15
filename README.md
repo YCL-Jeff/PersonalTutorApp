@@ -50,6 +50,10 @@ The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 
 
 **Figure 2 The Functions of Two Types of Users Overlap**
 
+<img src="https://github.com/user-attachments/assets/bd9c1058-422d-481c-af18-51c24ce27e95" width="50%" height="50%" >
+
+**Figure 3 Data Flow Diagram**
+
 ### Installation
 
 #### Prerequisites

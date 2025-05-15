@@ -4,6 +4,10 @@
 
 The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 Mobile Applications Development at the University of Southampton. It connects tutors and students, enabling course creation, enrollment management, and progress tracking using modern Android technologies and Firebase.
 
+<img src="https://github.com/user-attachments/assets/4a34085a-ff8a-44dc-afd6-03ee40365ad9" width="25%" height="25%" >
+
+**Figure 1 HomeScreen User Interface**
+
 ### Features
 
 1. **Course Enrollment Management**:
@@ -23,6 +27,9 @@ The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 
 6. **Lesson Completion and Testing**:
    - Students can mark lessons as completed.
    - Tutors can send tests to students for specific courses.
+   
+
+
 
 ### Target Users
 
@@ -37,6 +44,11 @@ The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 
 3. **Language**: Kotlin (with coroutines and flows)
 4. **Architecture**: MVVM with Hilt dependency injection
 5. **Tools**: Android Studio, Firebase Console
+
+
+<img src="https://github.com/user-attachments/assets/fd16b09e-4b91-4d28-9591-5969ea23cb3a" width="50%" height="50%" >
+
+**Figure 2 The Functions of Two Types of Users Overlap**
 
 ### Installation
 

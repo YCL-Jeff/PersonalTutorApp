@@ -35,7 +35,7 @@ The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 
 
 1. **Students**: Enroll in courses, access lessons, and track learning progress.
 2. **Tutors**: Create and manage courses, review enrollments, and monitor student progress.
-3. **Educational Institutions**: Scalable for schools or tutoring centers.
+3. **Educational Institutions**: Scalable for schools or tutoring centres.
 
 ### Technology Stack
 
@@ -62,18 +62,18 @@ The **Personal Tutor App** is a mobile tutoring platform developed for COMP6239 
 2. JDK 17
 3. Firebase account and project
 4. Git
-5. Android device/emulator (API 21+)
+5. Android device/emulator (API 24+, Android 7.0 or later)
 
 #### Steps
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/<your-repo>/personal-tutor-app.git
-   cd personal-tutor-app
+   git clone https://github.com/YCL-Jeff/PersonalTutorApp.git
+   cd PersonalTutorApp
    ```
 2. Set up Firebase:
-   - Create a Firebase project.
-   - Add `google-services.json` to the app directory.
+   - Create a Firebase project and enable Authentication (email/password), Firestore and Storage.
+   - Download your own `google-services.json` and place it in `app/`. This file is not included in the repository.
 3. Build and run:
    - Open in Android Studio.
    - Sync project with Gradle.
